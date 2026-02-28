@@ -17,4 +17,9 @@ export type RootStackParamList = {
   Auth: undefined;
   ManagerTabs: undefined;
   EmployeeTabs: undefined;
+  RecordingsList: {
+    shiftId: string;
+    employeeId: string;
+    employeeName: string;
+  };
 };

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -18,6 +18,7 @@ import {
 import { Track, RoomEvent, ConnectionState } from 'livekit-client';
 import { fetchLiveKitToken } from '../services/livekitToken';
 import { LIVEKIT_URL } from '../services/livekit';
+import { supabase } from '../services/supabase';
 
 interface EmployeeStreamingProps {
   shiftId: string;
@@ -29,6 +30,7 @@ export default function EmployeeStreaming({ shiftId, employeeName }: EmployeeStr
   const [isConnecting, setIsConnecting] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [egressId, setEgressId] = useState<string | null>(null);
 
   const handleStartStreaming = useCallback(async () => {
     if (isConnecting) return;
@@ -49,12 +51,26 @@ export default function EmployeeStreaming({ shiftId, employeeName }: EmployeeStr
   }, [shiftId, isConnecting]);
 
   const handleStopStreaming = useCallback(async () => {
+    if (egressId) {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        await supabase.functions.invoke('stop-egress', {
+          body: { egressId },
+          headers: session?.access_token
+            ? { Authorization: `Bearer ${session.access_token}` }
+            : undefined,
+        });
+      } catch (err) {
+        console.warn('stop-egress call failed (non-critical):', err);
+      }
+      setEgressId(null);
+    }
+
     setToken(null);
     setIsStreaming(false);
     await AudioSession.stopAudioSession();
-  }, []);
+  }, [egressId]);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       AudioSession.stopAudioSession();
@@ -95,15 +111,28 @@ export default function EmployeeStreaming({ shiftId, employeeName }: EmployeeStr
         audio={false}
         video={true}
       >
-        <StreamingView onStop={handleStopStreaming} />
+        <StreamingView
+          shiftId={shiftId}
+          onStop={handleStopStreaming}
+          egressId={egressId}
+          onEgressStarted={setEgressId}
+        />
       </LiveKitRoom>
     </View>
   );
 }
 
-function StreamingView({ onStop }: { onStop: () => void }) {
+interface StreamingViewProps {
+  shiftId: string;
+  onStop: () => void;
+  egressId: string | null;
+  onEgressStarted: (id: string) => void;
+}
+
+function StreamingView({ shiftId, onStop, egressId, onEgressStarted }: StreamingViewProps) {
   const room = useRoomContext();
   const [connectionState, setConnectionState] = useState<string>('connecting');
+  const egressStartedRef = useRef(false);
 
   useEffect(() => {
     if (!room) return;
@@ -112,35 +141,70 @@ function StreamingView({ onStop }: { onStop: () => void }) {
       setConnectionState(state);
     };
 
-    const handleDisconnected = () => {
-      setConnectionState('disconnected');
-    };
-
-    const handleReconnecting = () => {
-      setConnectionState('reconnecting');
-    };
-
-    const handleReconnected = () => {
+    const handleConnected = async () => {
       setConnectionState('connected');
+
+      if (egressStartedRef.current) return;
+      egressStartedRef.current = true;
+
+      try {
+        console.log('Room connected — starting egress for shift:', shiftId);
+
+        // ── FIX: explicitly pass the session token ──────────────────────────
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
+        if (sessionError || !session?.access_token) {
+          console.error('No valid session found, cannot start egress:', sessionError);
+          return;
+        }
+
+        console.log('Session token found, invoking start-egress...');
+
+        const { data, error } = await supabase.functions.invoke('start-egress', {
+          body: { shiftId },
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+          },
+        });
+
+        if (error) {
+          console.error('start-egress error:', error);
+        } else if (data?.egressId) {
+          console.log('Egress started:', data.egressId);
+          onEgressStarted(data.egressId);
+        } else {
+          console.warn('start-egress returned no egressId:', data);
+        }
+      } catch (err) {
+        console.error('start-egress invoke failed:', err);
+      }
     };
 
+    const handleDisconnected = () => setConnectionState('disconnected');
+    const handleReconnecting = () => setConnectionState('reconnecting');
+    const handleReconnected  = () => setConnectionState('connected');
+
+    room.on(RoomEvent.Connected, handleConnected);
     room.on(RoomEvent.ConnectionStateChanged, handleStateChange);
     room.on(RoomEvent.Disconnected, handleDisconnected);
     room.on(RoomEvent.Reconnecting, handleReconnecting);
     room.on(RoomEvent.Reconnected, handleReconnected);
 
-    // Set initial state
-    setConnectionState(room.state);
+    if (room.state === ConnectionState.Connected) {
+      handleConnected();
+    } else {
+      setConnectionState(room.state);
+    }
 
     return () => {
+      room.off(RoomEvent.Connected, handleConnected);
       room.off(RoomEvent.ConnectionStateChanged, handleStateChange);
       room.off(RoomEvent.Disconnected, handleDisconnected);
       room.off(RoomEvent.Reconnecting, handleReconnecting);
       room.off(RoomEvent.Reconnected, handleReconnected);
     };
-  }, [room]);
+  }, [room, shiftId, onEgressStarted]);
 
-  // Get local camera track
   const tracks = useTracks([Track.Source.Camera], { onlySubscribed: false });
   const localTrack = tracks.find(
     (t) => isTrackReference(t) && t.participant.isLocal
@@ -148,7 +212,6 @@ function StreamingView({ onStop }: { onStop: () => void }) {
 
   return (
     <View style={styles.streamingContainer}>
-      {/* Connection status */}
       <View style={styles.connectionBar}>
         <View
           style={[
@@ -169,9 +232,15 @@ function StreamingView({ onStop }: { onStop: () => void }) {
             ? 'Connecting...'
             : 'Disconnected'}
         </Text>
+
+        {egressId && connectionState === 'connected' && (
+          <View style={styles.recBadge}>
+            <View style={styles.recDot} />
+            <Text style={styles.recText}>REC</Text>
+          </View>
+        )}
       </View>
 
-      {/* Local camera preview */}
       <View style={styles.previewContainer}>
         {localTrack && isTrackReference(localTrack) ? (
           <VideoTrack trackRef={localTrack} style={styles.localVideo} />
@@ -182,7 +251,6 @@ function StreamingView({ onStop }: { onStop: () => void }) {
         )}
       </View>
 
-      {/* Stop button */}
       <TouchableOpacity style={styles.stopButton} onPress={onStop}>
         <Text style={styles.stopText}>Stop Streaming</Text>
       </TouchableOpacity>
@@ -229,12 +297,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 8,
     marginBottom: 12,
+    gap: 8,
   },
   connectionDot: {
     width: 10,
     height: 10,
     borderRadius: 5,
-    marginRight: 8,
   },
   dotConnected: {
     backgroundColor: '#22C55E',
@@ -249,6 +317,27 @@ const styles = StyleSheet.create({
     color: '#F8FAFC',
     fontSize: 14,
     fontWeight: '600',
+  },
+  recBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EF4444',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    gap: 5,
+  },
+  recDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: '#fff',
+  },
+  recText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1,
   },
   previewContainer: {
     borderRadius: 12,

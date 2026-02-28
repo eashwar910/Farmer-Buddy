@@ -9,12 +9,15 @@ import {
   ActivityIndicator,
   RefreshControl,
 } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAuth } from '../hooks/useAuth';
 import { useShift } from '../hooks/useShift';
 import { usePresence } from '../hooks/usePresence';
 import { supabase } from '../services/supabase';
 import { UserProfile } from '../types';
 import ManagerLiveGrid from '../components/ManagerLiveGrid';
+import { RootStackParamList } from '../navigation/types';
 
 function formatTime(totalSeconds: number): string {
   const h = Math.floor(totalSeconds / 3600);
@@ -23,18 +26,72 @@ function formatTime(totalSeconds: number): string {
   return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 }
 
+type NavProp = NativeStackNavigationProp<RootStackParamList>;
+
+interface RecordingSummary {
+  employee_id: string;
+  count: number;
+}
+
 export default function ManagerDashboardScreen() {
+  const navigation = useNavigation<NavProp>();
   const { profile, signOut } = useAuth();
   const { activeShift, startShift, endShift, elapsedSeconds, loading: shiftLoading } = useShift();
   const { isUserOnline } = usePresence(profile?.id, profile?.name, profile?.role);
   const [employees, setEmployees] = useState<UserProfile[]>([]);
   const [actionLoading, setActionLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [recordingSummaries, setRecordingSummaries] = useState<RecordingSummary[]>([]);
   const actionLockRef = useRef(false);
 
   useEffect(() => {
     fetchEmployees();
   }, []);
+
+  // Subscribe to recordings table when a shift is active
+  useEffect(() => {
+    if (!activeShift) {
+      setRecordingSummaries([]);
+      return;
+    }
+
+    fetchRecordingSummaries(activeShift.id);
+
+    const channel = supabase
+      .channel(`recordings-shift-${activeShift.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'recordings',
+          filter: `shift_id=eq.${activeShift.id}`,
+        },
+        () => fetchRecordingSummaries(activeShift.id)
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [activeShift?.id]);
+
+  const fetchRecordingSummaries = async (shiftId: string) => {
+    const { data } = await supabase
+      .from('recordings')
+      .select('employee_id')
+      .eq('shift_id', shiftId);
+
+    if (data) {
+      const counts: Record<string, number> = {};
+      data.forEach((r: { employee_id: string }) => {
+        counts[r.employee_id] = (counts[r.employee_id] ?? 0) + 1;
+      });
+      setRecordingSummaries(
+        Object.entries(counts).map(([employee_id, count]) => ({ employee_id, count }))
+      );
+    }
+  };
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -193,6 +250,39 @@ export default function ManagerDashboardScreen() {
         </View>
       )}
 
+      {/* Recordings section (visible during active shift) */}
+      {activeShift && recordingSummaries.length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>📼 Recordings</Text>
+          {employees
+            .filter((e) => recordingSummaries.find((r) => r.employee_id === e.id))
+            .map((emp) => {
+              const summary = recordingSummaries.find((r) => r.employee_id === emp.id);
+              return (
+                <TouchableOpacity
+                  key={emp.id}
+                  style={styles.recordingCard}
+                  onPress={() =>
+                    navigation.navigate('RecordingsList', {
+                      shiftId: activeShift.id,
+                      employeeId: emp.id,
+                      employeeName: emp.name,
+                    })
+                  }
+                >
+                  <View style={styles.recordingInfo}>
+                    <Text style={styles.recordingName}>{emp.name}</Text>
+                    <Text style={styles.recordingCount}>
+                      {summary?.count ?? 0} chunk{(summary?.count ?? 0) !== 1 ? 's' : ''} saved
+                    </Text>
+                  </View>
+                  <Text style={styles.recordingArrow}>›</Text>
+                </TouchableOpacity>
+              );
+            })}
+        </View>
+      )}
+
       {/* Employee List */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>
@@ -333,6 +423,34 @@ const styles = StyleSheet.create({
   liveGridSection: {
     paddingHorizontal: 24,
     marginBottom: 20,
+  },
+  // Recording cards
+  recordingCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1E293B',
+    borderRadius: 10,
+    padding: 14,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  recordingInfo: {
+    flex: 1,
+  },
+  recordingName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#F8FAFC',
+  },
+  recordingCount: {
+    fontSize: 12,
+    color: '#22C55E',
+    marginTop: 2,
+  },
+  recordingArrow: {
+    fontSize: 22,
+    color: '#64748B',
   },
   // Employee List
   section: {

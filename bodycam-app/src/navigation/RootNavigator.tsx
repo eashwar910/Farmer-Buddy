@@ -5,6 +5,7 @@ import { useAuth } from '../hooks/useAuth';
 import AuthStack from './AuthStack';
 import ManagerTabs from './ManagerTabs';
 import EmployeeTabs from './EmployeeTabs';
+import RecordingsListScreen from '../screens/RecordingsListScreen';
 import { RootStackParamList } from './types';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -39,7 +40,14 @@ export default function RootNavigator() {
   }
 
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Navigator
+      screenOptions={{
+        headerShown: false,
+        headerStyle: { backgroundColor: '#0F172A' },
+        headerTintColor: '#F8FAFC',
+        headerTitleStyle: { fontWeight: '700' },
+      }}
+    >
       {!isLoggedIn ? (
         <Stack.Screen name="Auth" component={AuthStack} />
       ) : isManager ? (
@@ -47,6 +55,12 @@ export default function RootNavigator() {
       ) : (
         <Stack.Screen name="EmployeeTabs" component={EmployeeTabs} />
       )}
+      {/* Shared screens accessible from any tab */}
+      <Stack.Screen
+        name="RecordingsList"
+        component={RecordingsListScreen}
+        options={{ headerShown: true, title: 'Recordings' }}
+      />
     </Stack.Navigator>
   );
 }
