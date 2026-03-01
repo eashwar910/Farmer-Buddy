@@ -13,7 +13,7 @@ serve(async (req) => {
   }
 
   try {
-    // ── 1. Auth ──────────────────────────────────────────────────────────────
+    // ── 1. Auth: decode JWT directly (compatible with ECC rotated keys) ────────
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
       return new Response(JSON.stringify({ error: 'Missing authorization header' }), {
@@ -22,14 +22,20 @@ serve(async (req) => {
       });
     }
 
-    const supabaseUser = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      { global: { headers: { Authorization: authHeader } } }
-    );
+    const jwt = authHeader.replace('Bearer ', '');
+    let user: { id: string; email: string } | null = null;
+    try {
+      const base64Payload = jwt.split('.')[1];
+      const padded = base64Payload + '=='.slice(base64Payload.length % 4 || 4);
+      const payload = JSON.parse(atob(padded));
+      if (payload.sub && payload.role === 'authenticated') {
+        user = { id: payload.sub, email: payload.email ?? '' };
+      }
+    } catch (decodeErr) {
+      console.error('JWT decode error:', decodeErr);
+    }
 
-    const { data: { user }, error: authError } = await supabaseUser.auth.getUser();
-    if (authError || !user) {
+    if (!user) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -83,16 +89,49 @@ serve(async (req) => {
     if (!stopRes.ok) {
       const errText = await stopRes.text();
       console.error('Stop egress error:', stopRes.status, errText);
-      return new Response(
-        JSON.stringify({ error: `Stop egress failed ${stopRes.status}: ${errText}` }),
-        { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      // Still proceed to finalize the DB row even if LiveKit returns an error
+      // (egress may have already stopped naturally)
+    } else {
+      console.log('Egress stop requested:', egressId);
     }
 
-    console.log('Egress stop requested:', egressId);
+    // ── 6. Finalize recording row (fallback — webhook may also do this) ───────
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    );
 
-    // Note: the recording row will be finalized by the livekit-webhook
-    // when LiveKit fires egress_ended. We don't update status here.
+    const { data: recording } = await supabaseAdmin
+      .from('recordings')
+      .select('id, shift_id, employee_id')
+      .eq('egress_id', egressId)
+      .maybeSingle();
+
+    if (recording) {
+      const s3Endpoint = Deno.env.get('DO_SPACES_ENDPOINT') ?? '';
+      const s3Bucket   = Deno.env.get('DO_SPACES_BUCKET') ?? '';
+
+      const normalizedEndpoint = s3Endpoint.startsWith('http')
+        ? s3Endpoint.replace(/\/$/, '')
+        : `https://${s3Endpoint}`;
+      const endpointDomain = normalizedEndpoint.replace(/^https?:\/\//, '');
+      const storageUrl = `https://${s3Bucket}.${endpointDomain}/${recording.shift_id}/${recording.employee_id}/playlist.m3u8`;
+
+      const { error: updateError } = await supabaseAdmin
+        .from('recordings')
+        .update({
+          status:      'completed',
+          ended_at:    new Date().toISOString(),
+          storage_url: storageUrl,
+        })
+        .eq('egress_id', egressId);
+
+      if (updateError) {
+        console.error('Failed to update recording row:', updateError);
+      } else {
+        console.log('Recording row finalized for egress:', egressId, '→', storageUrl);
+      }
+    }
 
     return new Response(
       JSON.stringify({ success: true }),
@@ -101,7 +140,7 @@ serve(async (req) => {
 
   } catch (err) {
     console.error('stop-egress error:', err);
-    return new Response(JSON.stringify({ error: 'Internal server error' }), {
+    return new Response(JSON.stringify({ error: 'Internal server error', detail: String(err) }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

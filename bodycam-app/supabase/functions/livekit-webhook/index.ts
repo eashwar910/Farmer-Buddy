@@ -6,23 +6,23 @@ import { WebhookReceiver } from 'https://esm.sh/livekit-server-sdk@2.6.1';
 serve(async (req) => {
   try {
     // ── 1. Verify LiveKit webhook signature ──────────────────────────────────
-    const webhookSecret = Deno.env.get('LIVEKIT_WEBHOOK_SECRET');
-    if (!webhookSecret) {
-      console.error('LIVEKIT_WEBHOOK_SECRET not set');
-      return new Response('Webhook secret not configured', { status: 500 });
+    const livekitApiKey    = Deno.env.get('LIVEKIT_API_KEY') ?? '';
+    const livekitApiSecret = Deno.env.get('LIVEKIT_API_SECRET') ?? '';
+
+    if (!livekitApiKey || !livekitApiSecret) {
+      console.error('LIVEKIT_API_KEY or LIVEKIT_API_SECRET not set');
+      return new Response('LiveKit credentials not configured', { status: 500 });
     }
 
     const body = await req.text();
+    const authHeader = req.headers.get('Authorization') ?? '';
 
-    // WebhookReceiver will throw if signature is invalid
-    const receiver = new WebhookReceiver(
-      Deno.env.get('LIVEKIT_API_KEY') ?? '',
-      Deno.env.get('LIVEKIT_API_SECRET') ?? ''
-    );
+    // WebhookReceiver uses the API key+secret to verify the webhook JWT
+    const receiver = new WebhookReceiver(livekitApiKey, livekitApiSecret);
 
     let event: any;
     try {
-      event = receiver.receive(body, req.headers.get('Authorization') ?? '');
+      event = await receiver.receive(body, authHeader);
     } catch (sigErr) {
       console.error('Webhook signature verification failed:', sigErr);
       return new Response('Invalid signature', { status: 401 });
@@ -36,46 +36,58 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
+    // ── 3. Extract egress info ───────────────────────────────────────────────
+    // Note: The LiveKit SDK may use either camelCase (egressId) or
+    // snake_case (egress_id) depending on version — handle both
     const egress = event.egressInfo;
 
-    // ── 3. Handle egress events ──────────────────────────────────────────────
+    if (!egress) {
+      // Not an egress event — return OK
+      return new Response('ok', { status: 200 });
+    }
+
+    // Normalize egressId (SDK v2 uses camelCase)
+    const egressId = egress.egressId ?? egress.egress_id;
+
+    // ── 4. Handle egress events ──────────────────────────────────────────────
     if (event.event === 'egress_started') {
-      console.log('Egress started:', egress?.egressId);
-      // Row already inserted by start-egress function. Nothing more to do.
-    }
+      console.log('Egress started:', egressId);
+      // Row was already inserted by start-egress function — nothing more to do
 
-    else if (event.event === 'egress_updated') {
-      // Fired when a segment completes — good time to bump chunk_index
-      if (egress?.egressId && egress?.status !== undefined) {
-        console.log('Egress updated:', egress.egressId, 'status:', egress.status);
-      }
-    }
+    } else if (event.event === 'egress_updated') {
+      console.log('Egress updated:', egressId, 'status:', egress.status);
+      // Fired when a segment completes — could update chunk_index here if needed
 
-    else if (event.event === 'egress_ended') {
-      if (!egress?.egressId) {
+    } else if (event.event === 'egress_ended') {
+      if (!egressId) {
         console.warn('egress_ended with no egressId');
         return new Response('ok', { status: 200 });
       }
 
-      console.log('Egress ended:', egress.egressId);
+      console.log('Egress ended:', egressId, 'status:', egress.status);
 
       // Determine final status
-      const failed = egress.status === 'EGRESS_FAILED' || egress.error;
+      const failed = egress.status === 'EGRESS_FAILED' || !!egress.error;
       const status = failed ? 'failed' : 'completed';
 
-      // Build storage_url from the first segment output if available
-      // segments are under: {shiftId}/{employeeId}/chunk_<n>.ts
-      // We'll store the base path so the manager can list all chunks
+      // Build storage_url from the segment results if available
+      // segments live at: {shiftId}/{employeeId}/chunk_N.ts
       let storageUrl: string | null = null;
-      const segOut = egress.segmentResults?.[0];
-      if (segOut?.playlistLocation) {
+
+      const segmentResults = egress.segmentResults ?? egress.segment_results;
+      const segOut = Array.isArray(segmentResults) ? segmentResults[0] : null;
+      if (segOut) {
         // playlistLocation is the full S3 path e.g. s3://farmerbuddy-recordings/shiftId/userId/playlist.m3u8
-        storageUrl = segOut.playlistLocation;
-      } else if (egress.roomName && egress.roomName.startsWith('shift-')) {
-        // Fallback: construct URL from known path convention
+        storageUrl = segOut.playlistLocation ?? segOut.playlist_location ?? null;
+      }
+
+      if (!storageUrl && egress.roomName) {
+        // Fallback: construct path from room name convention
+        const shiftId  = (egress.roomName ?? '').replace('shift-', '');
         const endpoint = Deno.env.get('DO_SPACES_ENDPOINT') ?? '';
         const bucket   = Deno.env.get('DO_SPACES_BUCKET') ?? '';
-        storageUrl = `${endpoint}/${bucket}/${egress.roomName.replace('shift-', '')}`;
+        const normEndpoint = endpoint.startsWith('http') ? endpoint : `https://${endpoint}`;
+        storageUrl = `${normEndpoint}/${bucket}/${shiftId}`;
       }
 
       const { error: updateError } = await supabase
@@ -85,13 +97,13 @@ serve(async (req) => {
           ended_at:    new Date().toISOString(),
           storage_url: storageUrl,
         })
-        .eq('egress_id', egress.egressId);
+        .eq('egress_id', egressId);
 
       if (updateError) {
         console.error('Failed to update recording row:', updateError);
         // Return 200 anyway — don't cause LiveKit to retry in a loop
       } else {
-        console.log(`Recording row updated: ${egress.egressId} → ${status}`);
+        console.log(`Recording row updated: ${egressId} → ${status} | url: ${storageUrl}`);
       }
     }
 

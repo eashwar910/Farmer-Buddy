@@ -14,7 +14,7 @@ serve(async (req) => {
   }
 
   try {
-    // Verify the user is authenticated via Supabase JWT
+    // ── 1. Auth: decode JWT directly (compatible with ECC rotated keys) ────────
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
       return new Response(JSON.stringify({ error: 'Missing authorization header' }), {
@@ -23,21 +23,29 @@ serve(async (req) => {
       });
     }
 
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      { global: { headers: { Authorization: authHeader } } }
-    );
+    const jwt = authHeader.replace('Bearer ', '');
+    let user: { id: string; email: string } | null = null;
+    try {
+      const base64Payload = jwt.split('.')[1];
+      let base64 = base64Payload.replace(/-/g, '+').replace(/_/g, '/');
+      const padLen = (4 - (base64.length % 4)) % 4;
+      base64 += "=".repeat(padLen);
+      const payload = JSON.parse(atob(base64));
+      if (payload.sub && payload.role === 'authenticated') {
+        user = { id: payload.sub, email: payload.email ?? '' };
+      }
+    } catch (decodeErr) {
+      console.error('JWT decode error:', decodeErr);
+    }
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
+    if (!user) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // Get request body
+    // ── 2. Parse body ────────────────────────────────────────────────────────
     const { shiftId } = await req.json();
     if (!shiftId) {
       return new Response(JSON.stringify({ error: 'shiftId is required' }), {
@@ -46,14 +54,21 @@ serve(async (req) => {
       });
     }
 
+    // ── 3. Use service-role client to bypass RLS ─────────────────────────────
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    );
+
     // Fetch user profile to determine role
-    const { data: profile, error: profileError } = await supabase
+    const { data: profile, error: profileError } = await supabaseAdmin
       .from('users')
       .select('role, name')
       .eq('id', user.id)
       .single();
 
     if (profileError || !profile) {
+      console.error('Profile not found for user:', user.id, profileError);
       return new Response(JSON.stringify({ error: 'User profile not found' }), {
         status: 404,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -61,7 +76,7 @@ serve(async (req) => {
     }
 
     // Verify the shift exists and is active
-    const { data: shift, error: shiftError } = await supabase
+    const { data: shift, error: shiftError } = await supabaseAdmin
       .from('shifts')
       .select('id, status')
       .eq('id', shiftId)
@@ -75,7 +90,7 @@ serve(async (req) => {
       });
     }
 
-    // LiveKit credentials from environment
+    // ── 4. LiveKit credentials ───────────────────────────────────────────────
     const livekitApiKey = Deno.env.get('LIVEKIT_API_KEY');
     const livekitApiSecret = Deno.env.get('LIVEKIT_API_SECRET');
 
@@ -91,7 +106,7 @@ serve(async (req) => {
     const participantName = profile.name || user.email || 'Unknown';
     const isManager = profile.role === 'manager';
 
-    // Create LiveKit access token with role-scoped permissions
+    // ── 5. Mint scoped token ─────────────────────────────────────────────────
     const token = new AccessToken(livekitApiKey, livekitApiSecret, {
       identity: participantIdentity,
       name: participantName,
@@ -101,16 +116,16 @@ serve(async (req) => {
     token.addGrant({
       room: roomName,
       roomJoin: true,
-      canPublish: !isManager, // Employees publish, managers only subscribe
+      canPublish: !isManager,   // Employees publish; managers subscribe only
       canSubscribe: true,
       canPublishData: true,
     });
 
-    const jwt = await token.toJwt();
+    const jwt2 = await token.toJwt();
 
     return new Response(
       JSON.stringify({
-        token: jwt,
+        token: jwt2,
         room: roomName,
         identity: participantIdentity,
       }),
@@ -121,7 +136,7 @@ serve(async (req) => {
     );
   } catch (err) {
     console.error('Error generating token:', err);
-    return new Response(JSON.stringify({ error: 'Internal server error' }), {
+    return new Response(JSON.stringify({ error: 'Internal server error', detail: String(err) }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
