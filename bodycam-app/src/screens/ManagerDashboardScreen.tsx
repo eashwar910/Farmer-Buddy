@@ -4,9 +4,10 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  FlatList,
   Alert,
   ActivityIndicator,
+  ScrollView,
+  SafeAreaView,
   RefreshControl,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
@@ -188,7 +189,20 @@ export default function ManagerDashboardScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.safeArea}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.scrollContent}
+      showsVerticalScrollIndicator={false}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={handleRefresh}
+          tintColor="#3B82F6"
+          colors={['#3B82F6']}
+        />
+      }
+    >
       <View style={styles.headerBar}>
         <View>
           <Text style={styles.greeting}>Welcome back,</Text>
@@ -297,32 +311,47 @@ export default function ManagerDashboardScreen() {
             </Text>
           </View>
         ) : (
-          <FlatList
-            data={employees}
-            keyExtractor={(item) => item.id}
-            renderItem={renderEmployee}
-            contentContainerStyle={styles.list}
-            refreshControl={
-              <RefreshControl
-                refreshing={refreshing}
-                onRefresh={handleRefresh}
-                tintColor="#3B82F6"
-                colors={['#3B82F6']}
-              />
-            }
-            extraData={onlineCount}
-          />
+          employees.map((item) => {
+            const online = isUserOnline(item.id);
+            return (
+              <View key={item.id} style={styles.employeeCard}>
+                <View style={styles.avatar}>
+                  <Text style={styles.avatarText}>
+                    {item.name?.charAt(0)?.toUpperCase() || '?'}
+                  </Text>
+                </View>
+                <View style={styles.employeeInfo}>
+                  <Text style={styles.employeeName}>{item.name}</Text>
+                  <Text style={styles.employeeEmail}>{item.email}</Text>
+                </View>
+                <View style={styles.statusBadge}>
+                  <View style={[styles.statusDot, online ? styles.statusDotOnline : styles.statusDotOffline]} />
+                  <Text style={[styles.statusLabel, online ? styles.statusLabelOnline : styles.statusLabelOffline]}>
+                    {online ? 'Online' : 'Offline'}
+                  </Text>
+                </View>
+              </View>
+            );
+          })
         )}
       </View>
-    </View>
+    </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#0F172A',
+  },
   container: {
     flex: 1,
     backgroundColor: '#0F172A',
+  },
+  scrollContent: {
     paddingTop: 60,
+    paddingBottom: 40,
   },
   headerBar: {
     flexDirection: 'row',

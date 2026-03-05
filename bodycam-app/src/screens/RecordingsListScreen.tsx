@@ -10,6 +10,7 @@ import {
   Alert,
 } from 'react-native';
 import { supabase } from '../services/supabase';
+import RecordingSummaryModal from '../components/RecordingSummaryModal';
 
 interface Recording {
   id: string;
@@ -21,6 +22,8 @@ interface Recording {
   status: 'recording' | 'completed' | 'failed';
   started_at: string;
   ended_at: string | null;
+  summary: string | null;
+  processing_status: 'pending' | 'processing' | 'completed' | 'failed' | null;
 }
 
 interface RecordingsListScreenProps {
@@ -38,6 +41,8 @@ export default function RecordingsListScreen({ route, navigation }: RecordingsLi
   const { shiftId, employeeId, employeeName } = route.params;
   const [recordings, setRecordings] = useState<Recording[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedRecording, setSelectedRecording] = useState<Recording | null>(null);
+  const [showSummaryModal, setShowSummaryModal] = useState(false);
 
   useEffect(() => {
     navigation.setOptions({ title: `${employeeName} — Recordings` });
@@ -94,6 +99,11 @@ export default function RecordingsListScreen({ route, navigation }: RecordingsLi
     }
   };
 
+  const handleViewSummary = (recording: Recording) => {
+    setSelectedRecording(recording);
+    setShowSummaryModal(true);
+  };
+
   const formatTime = (iso: string) => {
     const d = new Date(iso);
     return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -142,13 +152,36 @@ export default function RecordingsListScreen({ route, navigation }: RecordingsLi
           </View>
         )}
 
+        {/* AI Summary Button */}
+        {item.status === 'completed' && (
+          <TouchableOpacity
+            style={[
+              styles.summaryButton,
+              item.processing_status === 'completed' && styles.summaryButtonReady,
+              item.processing_status === 'processing' && styles.summaryButtonProcessing,
+            ]}
+            onPress={() => handleViewSummary(item)}
+          >
+            {item.processing_status === 'processing' ? (
+              <>
+                <ActivityIndicator size="small" color="#F59E0B" />
+                <Text style={styles.summaryButtonText}>⏳ AI Processing...</Text>
+              </>
+            ) : item.processing_status === 'completed' ? (
+              <Text style={styles.summaryButtonText}>🤖 View AI Summary</Text>
+            ) : (
+              <Text style={styles.summaryButtonText}>⏱️ Summary Pending</Text>
+            )}
+          </TouchableOpacity>
+        )}
+
         {/* Open button */}
         {hasUrl && item.status === 'completed' && (
           <TouchableOpacity
             style={styles.openButton}
             onPress={() => handleOpen(item.storage_url!)}
           >
-            <Text style={styles.openButtonText}>⬆ Open in Browser</Text>
+            <Text style={styles.openButtonText}>⬆ Open Video</Text>
           </TouchableOpacity>
         )}
 
@@ -172,25 +205,42 @@ export default function RecordingsListScreen({ route, navigation }: RecordingsLi
 
   return (
     <View style={styles.container}>
-      <Text style={styles.headerTitle}>{employeeName}</Text>
-      <Text style={styles.headerSubtitle}>{recordings.length} recording{recordings.length !== 1 ? 's' : ''}</Text>
-
       {recordings.length === 0 ? (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyIcon}>📼</Text>
-          <Text style={styles.emptyTitle}>No Recordings Yet</Text>
-          <Text style={styles.emptySubtext}>
-            Recordings will appear here automatically once the employee starts streaming.
-          </Text>
-        </View>
+        <>
+          <Text style={styles.headerTitle}>{employeeName}</Text>
+          <Text style={styles.headerSubtitle}>0 recordings</Text>
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyIcon}>📼</Text>
+            <Text style={styles.emptyTitle}>No Recordings Yet</Text>
+            <Text style={styles.emptySubtext}>
+              Recordings will appear here automatically once the employee starts streaming.
+            </Text>
+          </View>
+        </>
       ) : (
         <FlatList
           data={recordings}
           keyExtractor={(item) => item.id}
           renderItem={renderRecording}
           contentContainerStyle={styles.list}
+          ListHeaderComponent={
+            <View style={styles.header}>
+              <Text style={styles.headerTitle}>{employeeName}</Text>
+              <Text style={styles.headerSubtitle}>{recordings.length} recording{recordings.length !== 1 ? 's' : ''}</Text>
+            </View>
+          }
+          showsVerticalScrollIndicator={true}
         />
       )}
+
+      {/* Summary Modal */}
+      <RecordingSummaryModal
+        visible={showSummaryModal}
+        onClose={() => setShowSummaryModal(false)}
+        employeeName={employeeName}
+        summary={selectedRecording?.summary || null}
+        loading={selectedRecording?.processing_status === 'processing'}
+      />
     </View>
   );
 }
@@ -199,8 +249,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#0F172A',
-    paddingTop: 20,
-    paddingHorizontal: 20,
   },
   centered: {
     flex: 1,
@@ -208,25 +256,31 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  header: {
+    paddingTop: 16,
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+  },
   headerTitle: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '700',
     color: '#F8FAFC',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   headerSubtitle: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#64748B',
-    marginBottom: 20,
+    marginBottom: 8,
   },
   list: {
-    paddingBottom: 40,
+    paddingHorizontal: 16,
+    paddingBottom: 100,
   },
   card: {
     backgroundColor: '#1E293B',
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 12,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 10,
     borderWidth: 1,
     borderColor: '#334155',
   },
@@ -242,11 +296,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 8,
   },
   chunkLabel: {},
   chunkNumber: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
     color: '#F8FAFC',
   },
@@ -284,28 +338,53 @@ const styles = StyleSheet.create({
   timeRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 6,
+    marginBottom: 4,
   },
   timeLabel: {
-    fontSize: 13,
+    fontSize: 12,
     color: '#64748B',
   },
   timeValue: {
-    fontSize: 13,
+    fontSize: 12,
     color: '#CBD5E1',
     fontWeight: '500',
   },
+  summaryButton: {
+    marginTop: 10,
+    backgroundColor: '#1E293B',
+    borderRadius: 8,
+    padding: 10,
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  summaryButtonReady: {
+    backgroundColor: '#1E3A8A',
+    borderColor: '#3B82F6',
+  },
+  summaryButtonProcessing: {
+    backgroundColor: '#1F1C0A',
+    borderColor: '#F59E0B',
+  },
+  summaryButtonText: {
+    color: '#E2E8F0',
+    fontWeight: '600',
+    fontSize: 13,
+  },
   openButton: {
-    marginTop: 12,
+    marginTop: 6,
     backgroundColor: '#3B82F6',
     borderRadius: 8,
-    padding: 12,
+    padding: 10,
     alignItems: 'center',
   },
   openButtonText: {
     color: '#fff',
     fontWeight: '600',
-    fontSize: 14,
+    fontSize: 13,
   },
   liveIndicator: {
     flexDirection: 'row',

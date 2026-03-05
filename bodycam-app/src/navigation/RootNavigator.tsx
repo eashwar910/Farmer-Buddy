@@ -6,6 +6,7 @@ import AuthStack from './AuthStack';
 import ManagerTabs from './ManagerTabs';
 import EmployeeTabs from './EmployeeTabs';
 import RecordingsListScreen from '../screens/RecordingsListScreen';
+import ShiftDetailsScreen from '../screens/ShiftDetailsScreen';
 import { RootStackParamList } from './types';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -60,6 +61,11 @@ export default function RootNavigator() {
         name="RecordingsList"
         component={RecordingsListScreen}
         options={{ headerShown: true, title: 'Recordings' }}
+      />
+      <Stack.Screen
+        name="ShiftDetails"
+        component={ShiftDetailsScreen}
+        options={{ headerShown: true, title: 'Shift Details' }}
       />
     </Stack.Navigator>
   );

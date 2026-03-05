@@ -2,6 +2,7 @@ import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import ManagerDashboardScreen from '../screens/ManagerDashboardScreen';
 import SettingsScreen from '../screens/SettingsScreen';
+import ShiftsScreen from '../screens/ShiftsScreen';
 import { ManagerTabParamList } from './types';
 import { Text } from 'react-native';
 
@@ -34,6 +35,15 @@ export default function ManagerTabs() {
         options={{
           tabBarIcon: ({ color }) => (
             <Text style={{ fontSize: 20 }}>📊</Text>
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Shifts"
+        component={ShiftsScreen}
+        options={{
+          tabBarIcon: ({ color }) => (
+            <Text style={{ fontSize: 20 }}>📋</Text>
           ),
         }}
       />

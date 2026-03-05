@@ -5,6 +5,7 @@ export type AuthStackParamList = {
 
 export type ManagerTabParamList = {
   Dashboard: undefined;
+  Shifts: undefined;
   Settings: undefined;
 };
 
@@ -21,5 +22,9 @@ export type RootStackParamList = {
     shiftId: string;
     employeeId: string;
     employeeName: string;
+  };
+  ShiftDetails: {
+    shiftId: string;
+    shiftStartedAt: string;
   };
 };

@@ -90,20 +90,49 @@ serve(async (req) => {
         storageUrl = `${normEndpoint}/${bucket}/${shiftId}`;
       }
 
-      const { error: updateError } = await supabase
+      const { data: updatedRow, error: updateError } = await supabase
         .from('recordings')
         .update({
           status,
           ended_at:    new Date().toISOString(),
           storage_url: storageUrl,
         })
-        .eq('egress_id', egressId);
+        .eq('egress_id', egressId)
+        .select('id')
+        .single();
 
       if (updateError) {
         console.error('Failed to update recording row:', updateError);
         // Return 200 anyway — don't cause LiveKit to retry in a loop
       } else {
         console.log(`Recording row updated: ${egressId} → ${status} | url: ${storageUrl}`);
+
+        // Auto-trigger AI summarization when a recording completes
+        if (status === 'completed' && updatedRow?.id) {
+          try {
+            const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+            const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+            const processRes = await fetch(
+              `${supabaseUrl}/functions/v1/process-recording`,
+              {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${supabaseServiceKey}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ recordingId: updatedRow.id }),
+              }
+            );
+            if (processRes.ok) {
+              console.log(`AI summarization triggered for recording ${updatedRow.id}`);
+            } else {
+              console.warn(`AI summarization trigger failed: ${processRes.status}`, await processRes.text());
+            }
+          } catch (processErr) {
+            // Non-critical — summarization can be retried from the app
+            console.warn('Failed to auto-trigger process-recording:', processErr);
+          }
+        }
       }
     }
 

@@ -1,6 +1,7 @@
-// LiveKit configuration
-// Update LIVEKIT_URL after deploying your LiveKit server on Digital Ocean
-export const LIVEKIT_URL = 'wss://livekit.farmerbuddy.site';
+import { LIVEKIT_URL as LIVEKIT_URL_ENV } from '@env';
+
+// LiveKit configuration - loaded from environment variables
+export const LIVEKIT_URL = LIVEKIT_URL_ENV;
 
 // Room name is derived from the shift ID for isolation
 export function getRoomName(shiftId: string): string {

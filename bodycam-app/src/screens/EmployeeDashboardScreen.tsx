@@ -8,6 +8,7 @@ import {
   Modal,
   Animated,
   ScrollView,
+  SafeAreaView,
 } from 'react-native';
 import { useAuth } from '../hooks/useAuth';
 import { useShift } from '../hooks/useShift';
@@ -73,7 +74,8 @@ export default function EmployeeDashboardScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.safeArea}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
       <View style={styles.headerBar}>
         <View>
           <Text style={styles.greeting}>Welcome back,</Text>
@@ -162,15 +164,23 @@ export default function EmployeeDashboardScreen() {
           </View>
         </View>
       </Modal>
-    </View>
+    </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#0F172A',
+  },
   container: {
     flex: 1,
     backgroundColor: '#0F172A',
+  },
+  scrollContent: {
     paddingTop: 60,
+    paddingBottom: 40,
   },
   headerBar: {
     flexDirection: 'row',
