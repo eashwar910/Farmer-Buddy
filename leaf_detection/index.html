@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartAgro - Leaf Disease Detector</title>
+    <link rel="stylesheet" href="style1.css">
+</head>
+<body>
+    <div class="app-shell">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="brand">
+                <span class="brand-icon">🌿</span>
+                <div>
+                    <h1>SmartAgro</h1>
+                    <p>Leaf Disease Detector</p>
+                </div>
+            </div>
+
+            <nav class="nav-menu">
+                <button class="nav-item active">Home</button>
+                <button class="nav-item">How It Works</button>
+                <button class="nav-item">About</button>
+            </nav>
+
+            <div class="sidebar-footer">
+                <p>© 2026 SmartAgro AI</p>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <div class="topbar">
+                <h2>Leaf Disease Detection</h2>
+                <p class="topbar-subtitle">Upload a leaf image to detect diseases using AI</p>
+            </div>
+
+            <div class="content-card">
+                <!-- Upload Section -->
+                <div class="upload-section">
+                    <label class="upload-label" for="leafImage">Select Leaf Image</label>
+                    <input type="file" id="leafImage" accept="image/*">
+                </div>
+
+                <!-- Preview Section -->
+                <div class="preview-wrapper">
+                    <img id="leafPreview" alt="Leaf preview">
+                    <div id="previewPlaceholder" class="preview-placeholder">
+                        <span>📷</span>
+                        <p>Image preview will appear here</p>
+                    </div>
+                </div>
+
+                <!-- Action Button -->
+                <div class="actions">
+                    <button id="detectBtn">Detect Disease</button>
+                </div>
+
+                <!-- Status Message -->
+                <div id="statusMessage" class="status-message"></div>
+
+                <!-- Results Section -->
+                <div class="result-card">
+                    <h3>Detection Results</h3>
+
+                    <div>
+                        <strong>Disease/Condition:</strong>
+                        <p id="diseaseName">No result yet</p>
+                    </div>
+
+                    <div>
+                        <strong>Confidence Score:</strong>
+                        <p id="confidenceScore">-</p>
+                    </div>
+
+                    <div>
+                        <strong>Status:</strong>
+                        <p id="diseaseStatus">-</p>
+                    </div>
+
+                    <!-- Probabilities Section -->
+                    <div class="probabilities-box">
+                        <strong>All Predictions:</strong>
+                        <div id="allProbabilities"></div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Scripts -->
+    <script src="served_script.js"></script>
+</body>
+</html>
+
