@@ -172,7 +172,7 @@ serve(async (req)=>{
           playlist_name:   playlistName,
           live_playlist_name: '',
           // 60 s per segment for development; set to 900 for 15-minute production chunks
-          segment_duration: 60,
+          segment_duration: 10,
           protocol: 0,
           s3: {
             access_key: s3Key,

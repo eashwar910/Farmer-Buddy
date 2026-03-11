@@ -101,12 +101,17 @@ serve(async (req) => {
     // ── 7. Try to get real video analysis from DO Spaces ─────────────────────
     let summary: string | null = null;
 
-    if (recording.storage_url) {
-      try {
-        summary = await analyzeVideoFromStorage(recording.storage_url, employeeName, geminiKey);
-      } catch (videoErr) {
-        console.error('Video analysis failed, falling back to metadata summary:', videoErr);
-      }
+    const recordingFull = recording as any;
+    try {
+      summary = await analyzeVideoFromStorage(
+        recordingFull.storage_url,
+        recordingFull.shift_id,
+        recordingFull.employee_id,
+        employeeName,
+        geminiKey
+      );
+    } catch (videoErr) {
+      console.error('Video analysis failed, falling back to metadata summary:', videoErr);
     }
 
     // ── 8. Fallback: metadata-based summary with Gemini ──────────────────────
@@ -155,40 +160,50 @@ async function failRecording(supabase: any, id: string, msg: string) {
 /**
  * Download video segment(s) from DO Spaces using AWS Sig V4,
  * upload to Gemini Files API, then analyze with generateContent.
+ *
+ * The playlist path is ALWAYS: {shiftId}/{employeeId}/playlist.m3u8
+ * We reconstruct this from the recording row rather than relying on
+ * storage_url (which LiveKit often omits in segmentResults).
  */
-async function analyzeVideoFromStorage(storageUrl: string, employeeName: string, geminiKey: string): Promise<string> {
+async function analyzeVideoFromStorage(
+  storageUrl: string | null | undefined,
+  shiftId: string,
+  employeeId: string,
+  employeeName: string,
+  geminiKey: string
+): Promise<string> {
   const s3Key    = Deno.env.get('DO_SPACES_KEY')    ?? '';
   const s3Secret = Deno.env.get('DO_SPACES_SECRET') ?? '';
   const s3Region = Deno.env.get('S3_REGION')        ?? 'sgp1';
-  // If region is set to ap-southeast-1, DO Spaces still uses sgp1
   const activeRegion = s3Region === 'ap-southeast-1' ? 'sgp1' : s3Region;
   const s3Bucket = Deno.env.get('DO_SPACES_BUCKET') ?? '';
 
-  // Normalize the storage URL to the correct DO Spaces format:
-  // For aws4fetch to work correctly with DigitalOcean Spaces, we need 
-  // to construct a path-style URL for signing:
-  // https://sgp1.digitaloceanspaces.com/farmerbuddy-recordings/shift-id/employee-id/playlist.m3u8
+  // ── Reconstruct the playlist URL from known start-egress path convention:
+  // {shiftId}/{employeeId}/playlist.m3u8
+  // This is more reliable than parsing storage_url (which LiveKit often omits)
+  const baseSpacesUrl = `https://${activeRegion}.digitaloceanspaces.com/${s3Bucket}`;
+  let normalizedUrl: string;
 
-  // Extract the raw path (everything after .com/)
-  const urlObj = new URL(storageUrl);
-  let rawPath = urlObj.pathname;
-  
-  // Clean up any doubled bucket names in the path if they exist
-  if (rawPath.startsWith(`/${s3Bucket}/${s3Bucket}/`)) {
-    rawPath = rawPath.replace(`/${s3Bucket}/${s3Bucket}/`, `/${s3Bucket}/`);
-  } else if (!rawPath.startsWith(`/${s3Bucket}/`)) {
-    // Ensure bucket is the first part of the path
-    rawPath = `/${s3Bucket}${rawPath}`;
+  if (shiftId && employeeId) {
+    normalizedUrl = `${baseSpacesUrl}/${shiftId}/${employeeId}/playlist.m3u8`;
+    console.log('Using reconstructed playlist URL:', normalizedUrl);
+  } else if (storageUrl) {
+    // Fallback: try to normalize whatever storage_url we have
+    const urlObj = new URL(storageUrl);
+    let rawPath = urlObj.pathname;
+    if (rawPath.startsWith(`/${s3Bucket}/${s3Bucket}/`)) {
+      rawPath = rawPath.replace(`/${s3Bucket}/${s3Bucket}/`, `/${s3Bucket}/`);
+    } else if (!rawPath.startsWith(`/${s3Bucket}/`)) {
+      rawPath = `/${s3Bucket}${rawPath}`;
+    }
+    normalizedUrl = `https://${activeRegion}.digitaloceanspaces.com${rawPath}`;
+    if (!normalizedUrl.includes('playlist.m3u8')) {
+      normalizedUrl = normalizedUrl.replace(/\/?$/, '/playlist.m3u8');
+    }
+    console.log('Using normalized storage_url fallback:', normalizedUrl);
+  } else {
+    throw new Error('No valid URL: both shiftId/employeeId and storage_url are missing');
   }
-
-  let normalizedUrl = `https://${activeRegion}.digitaloceanspaces.com${rawPath}`;
-
-  // Ensure it ends with playlist.m3u8
-  if (!normalizedUrl.includes('playlist.m3u8')) {
-    normalizedUrl = normalizedUrl.replace(/\/?$/, '/playlist.m3u8');
-  }
-
-  console.log('Normalized path-style URL:', normalizedUrl);
 
   const aws = new AwsClient({
     accessKeyId: s3Key,
@@ -208,28 +223,45 @@ async function analyzeVideoFromStorage(storageUrl: string, employeeName: string,
 
   const segmentPaths = playlistText
     .split('\n')
-    .filter(line => line.trim().endsWith('.ts') && !line.startsWith('#'))
-    .slice(0, 3);
+    .filter(line => line.trim().endsWith('.ts') && !line.startsWith('#'));
 
   if (segmentPaths.length === 0) {
     throw new Error('No .ts segments found in playlist');
   }
 
   const baseUrl = normalizedUrl.replace(/playlist\.m3u8$/, '');
-  const segmentUrl = segmentPaths[0].startsWith('http')
-    ? segmentPaths[0]
-    : baseUrl + segmentPaths[0];
 
-  console.log('Fetching segment:', segmentUrl);
-  const segmentRes = await aws.fetch(segmentUrl);
-  if (!segmentRes.ok) {
-    const errText = await segmentRes.text();
-    throw new Error(`Failed to fetch segment: ${segmentRes.status} - ${errText}`);
+  // Fetch up to 6 segments and concatenate them — gives Gemini at least
+  // ~60 s of footage regardless of individual segment duration (10s, 30s, 60s etc.)
+  const segmentsToFetch = segmentPaths.slice(0, 6);
+  console.log(`Fetching ${segmentsToFetch.length} of ${segmentPaths.length} segments for Gemini upload`);
+
+  const segmentBuffers: Uint8Array[] = [];
+  for (const segPath of segmentsToFetch) {
+    const segmentUrl = segPath.startsWith('http') ? segPath : baseUrl + segPath;
+    console.log('Fetching segment:', segmentUrl);
+    const segmentRes = await aws.fetch(segmentUrl);
+    if (!segmentRes.ok) {
+      const errText = await segmentRes.text();
+      console.warn(`Skipping segment (${segmentRes.status}): ${errText.slice(0, 100)}`);
+      continue;
+    }
+    segmentBuffers.push(new Uint8Array(await segmentRes.arrayBuffer()));
   }
 
-  const segmentBuffer = await segmentRes.arrayBuffer();
-  const segmentBytes  = new Uint8Array(segmentBuffer);
-  console.log(`Downloaded segment: ${segmentBytes.byteLength} bytes`);
+  if (segmentBuffers.length === 0) {
+    throw new Error('All segment fetches failed');
+  }
+
+  // Concatenate all fetched segment buffers into one continuous TS stream
+  const totalBytes = segmentBuffers.reduce((acc, b) => acc + b.byteLength, 0);
+  const segmentBytes = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const buf of segmentBuffers) {
+    segmentBytes.set(buf, offset);
+    offset += buf.byteLength;
+  }
+  console.log(`Concatenated ${segmentBuffers.length} segments: ${segmentBytes.byteLength} bytes total`);
 
   // Upload to Gemini Files API
   const fileInfo = await uploadToGeminiFiles(segmentBytes, geminiKey);

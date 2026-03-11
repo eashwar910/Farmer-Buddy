@@ -32,6 +32,7 @@ type NavProp = NativeStackNavigationProp<RootStackParamList>;
 interface RecordingSummary {
   employee_id: string;
   count: number;
+  summaryCount: number;
 }
 
 export default function ManagerDashboardScreen() {
@@ -80,16 +81,18 @@ export default function ManagerDashboardScreen() {
   const fetchRecordingSummaries = async (shiftId: string) => {
     const { data } = await supabase
       .from('recordings')
-      .select('employee_id')
+      .select('employee_id, processing_status')
       .eq('shift_id', shiftId);
 
     if (data) {
-      const counts: Record<string, number> = {};
-      data.forEach((r: { employee_id: string }) => {
-        counts[r.employee_id] = (counts[r.employee_id] ?? 0) + 1;
+      const counts: Record<string, { count: number; summaryCount: number }> = {};
+      data.forEach((r: { employee_id: string; processing_status: string | null }) => {
+        if (!counts[r.employee_id]) counts[r.employee_id] = { count: 0, summaryCount: 0 };
+        counts[r.employee_id].count += 1;
+        if (r.processing_status === 'completed') counts[r.employee_id].summaryCount += 1;
       });
       setRecordingSummaries(
-        Object.entries(counts).map(([employee_id, count]) => ({ employee_id, count }))
+        Object.entries(counts).map(([employee_id, { count, summaryCount }]) => ({ employee_id, count, summaryCount }))
       );
     }
   };
@@ -142,6 +145,7 @@ export default function ManagerDashboardScreen() {
             actionLockRef.current = true;
             setActionLoading(true);
 
+            const shiftIdSnapshot = activeShift?.id;
             const { error } = await endShift();
 
             setActionLoading(false);
@@ -149,11 +153,55 @@ export default function ManagerDashboardScreen() {
 
             if (error) {
               Alert.alert('Error', error.message);
+            } else if (shiftIdSnapshot) {
+              // Fire-and-forget: trigger report generation for each employee
+              triggerReportsForShift(shiftIdSnapshot);
             }
           },
         },
       ]
     );
+  };
+
+  const triggerReportsForShift = async (shiftId: string) => {
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token;
+      if (!accessToken) return;
+
+      // Find all employees with completed recordings for this shift
+      const { data: recs } = await supabase
+        .from('recordings')
+        .select('employee_id')
+        .eq('shift_id', shiftId)
+        .eq('processing_status', 'completed');
+
+      if (!recs || recs.length === 0) return;
+
+      const uniqueEmployeeIds = [...new Set((recs as { employee_id: string }[]).map((r) => r.employee_id))];
+      const supabaseUrl = 'https://bkwrixhpykvcdpkvezsd.supabase.co';
+
+      for (const employeeId of uniqueEmployeeIds) {
+        fetch(`${supabaseUrl}/functions/v1/generate-shift-report`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ shiftId, employeeId }),
+        }).then((res) => {
+          if (res.ok) {
+            console.log(`Report triggered for employee: ${employeeId}`);
+          } else {
+            res.text().then((t) => console.warn(`Report failed for ${employeeId}:`, t));
+          }
+        }).catch((err) => {
+          console.warn('Report trigger error (non-critical):', err);
+        });
+      }
+    } catch (err) {
+      console.warn('triggerReportsForShift error (non-critical):', err);
+    }
   };
 
   const handleSignOut = () => {
@@ -271,7 +319,9 @@ export default function ManagerDashboardScreen() {
           {employees
             .filter((e) => recordingSummaries.find((r) => r.employee_id === e.id))
             .map((emp) => {
-              const summary = recordingSummaries.find((r) => r.employee_id === emp.id);
+              const rec = recordingSummaries.find((r) => r.employee_id === emp.id);
+              const count = rec?.count ?? 0;
+              const summaryCount = rec?.summaryCount ?? 0;
               return (
                 <TouchableOpacity
                   key={emp.id}
@@ -287,7 +337,8 @@ export default function ManagerDashboardScreen() {
                   <View style={styles.recordingInfo}>
                     <Text style={styles.recordingName}>{emp.name}</Text>
                     <Text style={styles.recordingCount}>
-                      {summary?.count ?? 0} chunk{(summary?.count ?? 0) !== 1 ? 's' : ''} saved
+                      {count} recording{count !== 1 ? 's' : ''}
+                      {summaryCount > 0 ? ` · ${summaryCount} AI ${summaryCount !== 1 ? 'summaries' : 'summary'} ready` : ''}
                     </Text>
                   </View>
                   <Text style={styles.recordingArrow}>›</Text>

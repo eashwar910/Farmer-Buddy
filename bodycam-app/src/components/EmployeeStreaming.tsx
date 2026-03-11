@@ -109,7 +109,8 @@ export default function EmployeeStreaming({ shiftId, employeeName }: EmployeeStr
           adaptiveStream: { pixelDensity: 'screen' },
         }}
         audio={false}
-        video={true}
+        video={{ facingMode: 'environment' }}
+
       >
         <StreamingView
           shiftId={shiftId}

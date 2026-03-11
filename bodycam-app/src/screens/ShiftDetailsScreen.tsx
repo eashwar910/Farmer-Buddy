@@ -11,6 +11,7 @@ import {
   ScrollView,
   RefreshControl,
   Alert,
+  Linking,
 } from 'react-native';
 import { supabase } from '../services/supabase';
 
@@ -39,11 +40,17 @@ interface EmployeeWithRecordings {
   recordings: Recording[];
 }
 
+interface ShiftReport {
+  employee_id: string;
+  report_url: string;
+}
+
 interface ShiftDetailsScreenProps {
   route: {
     params: {
       shiftId: string;
       shiftStartedAt: string;
+      shiftStatus?: string;
     };
   };
   navigation: any;
@@ -81,7 +88,6 @@ function SummaryContent({ summaryJson }: { summaryJson: string }) {
   try {
     parsed = JSON.parse(summaryJson);
   } catch {
-    // Not valid JSON — show as plain text
     return <Text style={modalStyles.summaryText}>{summaryJson}</Text>;
   }
 
@@ -158,28 +164,20 @@ function SummaryModal({
   onClose,
   employeeName,
   recording,
-  onRetry,
 }: {
   visible: boolean;
   onClose: () => void;
   employeeName: string;
   recording: Recording | null;
-  onRetry: (id: string) => void;
 }) {
   if (!recording) return null;
 
-  const isPending = !recording.processing_status || recording.processing_status === 'pending';
   const isProcessing = recording.processing_status === 'processing';
-  const isCompleted = recording.processing_status === 'completed';
-  const isFailed = recording.processing_status === 'failed';
+  const isCompleted  = recording.processing_status === 'completed';
+  const isFailed     = recording.processing_status === 'failed';
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="slide"
-      onRequestClose={onClose}
-    >
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={modalStyles.overlay}>
         <View style={modalStyles.sheet}>
           <View style={modalStyles.handle} />
@@ -200,26 +198,14 @@ function SummaryModal({
             ) : isFailed ? (
               <View style={modalStyles.stateBox}>
                 <Text style={modalStyles.stateIcon}>❌</Text>
-                <Text style={modalStyles.stateText}>Processing failed.</Text>
-                <TouchableOpacity
-                  style={modalStyles.retryBtn}
-                  onPress={() => onRetry(recording.id)}
-                >
-                  <Text style={modalStyles.retryBtnText}>🔄 Retry Summary</Text>
-                </TouchableOpacity>
+                <Text style={modalStyles.stateText}>AI processing failed for this chunk.</Text>
               </View>
             ) : (
               <View style={modalStyles.stateBox}>
-                <Text style={modalStyles.stateIcon}>⏱️</Text>
+                <Text style={modalStyles.stateIcon}>⏳</Text>
                 <Text style={modalStyles.stateText}>
-                  Summary is pending. The AI worker will process this recording automatically.
+                  Summary will be generated automatically once the chunk is recorded.
                 </Text>
-                <TouchableOpacity
-                  style={modalStyles.retryBtn}
-                  onPress={() => onRetry(recording.id)}
-                >
-                  <Text style={modalStyles.retryBtnText}>▶ Process Now</Text>
-                </TouchableOpacity>
               </View>
             )}
           </ScrollView>
@@ -235,12 +221,15 @@ function SummaryModal({
 
 export default function ShiftDetailsScreen({ route, navigation }: ShiftDetailsScreenProps) {
   const { shiftId, shiftStartedAt } = route.params;
-  const [groups, setGroups] = useState<EmployeeWithRecordings[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const [groups, setGroups]                   = useState<EmployeeWithRecordings[]>([]);
+  const [shiftStatus, setShiftStatus]         = useState<string>('ended');
+  const [loading, setLoading]                 = useState(true);
+  const [refreshing, setRefreshing]           = useState(false);
   const [selectedRecording, setSelectedRecording] = useState<Recording | null>(null);
-  const [selectedEmployee, setSelectedEmployee] = useState<string>('');
-  const [showModal, setShowModal] = useState(false);
+  const [selectedEmployee, setSelectedEmployee]   = useState<string>('');
+  const [showModal, setShowModal]             = useState(false);
+  const [shiftReports, setShiftReports]       = useState<ShiftReport[]>([]);
+  const [generatingReport, setGeneratingReport] = useState<string | null>(null); // employeeId being generated
 
   useEffect(() => {
     navigation.setOptions({ title: `Shift — ${formatDate(shiftStartedAt)}` });
@@ -250,34 +239,42 @@ export default function ShiftDetailsScreen({ route, navigation }: ShiftDetailsSc
       .channel(`shift-details-${shiftId}`)
       .on(
         'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'recordings',
-          filter: `shift_id=eq.${shiftId}`,
-        },
+        { event: '*', schema: 'public', table: 'recordings', filter: `shift_id=eq.${shiftId}` },
         () => fetchData()
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'shift_reports', filter: `shift_id=eq.${shiftId}` },
+        () => fetchShiftReports()
       )
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
   }, [shiftId]);
 
+  const fetchShiftReports = useCallback(async () => {
+    const { data } = await supabase
+      .from('shift_reports')
+      .select('employee_id, report_url')
+      .eq('shift_id', shiftId);
+    if (data) setShiftReports(data as ShiftReport[]);
+  }, [shiftId]);
+
   const fetchData = useCallback(async () => {
-    const [{ data: recordings, error: recError }, { data: employees, error: empError }] = await Promise.all([
-      supabase
-        .from('recordings')
-        .select('*')
-        .eq('shift_id', shiftId)
-        .order('started_at', { ascending: true }),
-      supabase
-        .from('users')
-        .select('id, name, email')
-        .eq('role', 'employee'),
+    const [
+      { data: recordings, error: recError },
+      { data: employees, error: empError },
+      { data: shiftData },
+    ] = await Promise.all([
+      supabase.from('recordings').select('*').eq('shift_id', shiftId).order('started_at', { ascending: true }),
+      supabase.from('users').select('id, name, email').eq('role', 'employee'),
+      supabase.from('shifts').select('status').eq('id', shiftId).single(),
     ]);
 
     if (recError) console.error('Failed to fetch recordings:', recError);
     if (empError) console.error('Failed to fetch employees:', empError);
+
+    if (shiftData) setShiftStatus((shiftData as any).status ?? 'ended');
 
     if (recordings && employees) {
       const empMap: Record<string, Employee> = {};
@@ -299,41 +296,51 @@ export default function ShiftDetailsScreen({ route, navigation }: ShiftDetailsSc
       setGroups(result);
     }
 
+    await fetchShiftReports();
     setLoading(false);
     setRefreshing(false);
-  }, [shiftId]);
+  }, [shiftId, fetchShiftReports]);
 
-  const handleRetry = async (recordingId: string) => {
+  const handleGenerateReport = async (employeeId: string, employeeName: string) => {
+    setGeneratingReport(employeeId);
     try {
-      // Refresh the session to ensure we have a valid token
       const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
       if (sessionError || !sessionData.session) {
         Alert.alert('Error', 'Session expired. Please sign in again.');
         return;
       }
       const accessToken = sessionData.session.access_token;
-
-      // Call the edge function directly using fetch for maximum reliability
       const supabaseUrl = 'https://bkwrixhpykvcdpkvezsd.supabase.co';
-      const response = await fetch(`${supabaseUrl}/functions/v1/process-recording`, {
+
+      const res = await fetch(`${supabaseUrl}/functions/v1/generate-shift-report`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ recordingId }),
+        body: JSON.stringify({ shiftId, employeeId }),
       });
 
-      if (!response.ok) {
-        const errText = await response.text();
-        throw new Error(`Function error ${response.status}: ${errText}`);
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Report generation failed: ${res.status} — ${errText}`);
       }
 
-      Alert.alert('Processing Started', 'The summary will be generated shortly.');
-      setShowModal(false);
-      fetchData();
+      const { reportUrl } = await res.json();
+      await fetchShiftReports();
+
+      Alert.alert(
+        'Report Ready',
+        `The report for ${employeeName} is ready.`,
+        [
+          { text: 'Open Report', onPress: () => Linking.openURL(reportUrl) },
+          { text: 'OK' },
+        ]
+      );
     } catch (err: any) {
-      Alert.alert('Error', err.message ?? 'Failed to start processing');
+      Alert.alert('Error', err.message ?? 'Failed to generate report');
+    } finally {
+      setGeneratingReport(null);
     }
   };
 
@@ -344,9 +351,9 @@ export default function ShiftDetailsScreen({ route, navigation }: ShiftDetailsSc
   };
 
   const renderRecording = (rec: Recording, index: number, empName: string) => {
-    const isLive = rec.status === 'recording';
-    const isFailed = rec.status === 'failed';
-    const summaryReady = rec.processing_status === 'completed';
+    const isLive         = rec.status === 'recording';
+    const isFailed       = rec.status === 'failed';
+    const summaryReady   = rec.processing_status === 'completed';
     const summaryProcessing = rec.processing_status === 'processing';
 
     return (
@@ -375,18 +382,20 @@ export default function ShiftDetailsScreen({ route, navigation }: ShiftDetailsSc
               styles.summaryBtn,
               summaryReady && styles.summaryBtnReady,
               summaryProcessing && styles.summaryBtnProcessing,
+              !summaryReady && !summaryProcessing && styles.summaryBtnPending,
             ]}
-            onPress={() => handleViewSummary(rec, empName)}
+            onPress={() => summaryReady ? handleViewSummary(rec, empName) : undefined}
+            disabled={!summaryReady}
           >
             {summaryProcessing ? (
               <>
                 <ActivityIndicator size="small" color="#F59E0B" />
-                <Text style={styles.summaryBtnText}>⏳ Processing…</Text>
+                <Text style={styles.summaryBtnText}>⏳ AI Processing…</Text>
               </>
             ) : summaryReady ? (
               <Text style={styles.summaryBtnText}>🤖 View AI Summary</Text>
             ) : (
-              <Text style={styles.summaryBtnText}>⏱️ View / Generate Summary</Text>
+              <Text style={[styles.summaryBtnText, { color: '#64748B' }]}>⏳ Pending…</Text>
             )}
           </TouchableOpacity>
         )}
@@ -394,26 +403,74 @@ export default function ShiftDetailsScreen({ route, navigation }: ShiftDetailsSc
     );
   };
 
-  const renderGroup = ({ item }: { item: EmployeeWithRecordings }) => (
-    <View style={styles.groupCard}>
-      <View style={styles.groupHeader}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>
-            {item.employee.name?.charAt(0)?.toUpperCase() ?? '?'}
-          </Text>
+  const renderGroup = ({ item }: { item: EmployeeWithRecordings }) => {
+    const existingReport = shiftReports.find((r) => r.employee_id === item.employee.id);
+    const isGenerating   = generatingReport === item.employee.id;
+    const hasCompletedChunks = item.recordings.some(
+      (r) => r.status === 'completed' && r.processing_status === 'completed'
+    );
+    const isShiftEnded = shiftStatus === 'ended';
+
+    return (
+      <View style={styles.groupCard}>
+        <View style={styles.groupHeader}>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>
+              {item.employee.name?.charAt(0)?.toUpperCase() ?? '?'}
+            </Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.groupName}>{item.employee.name}</Text>
+            <Text style={styles.groupSub}>
+              {item.recordings.length} recording session{item.recordings.length !== 1 ? 's' : ''}
+            </Text>
+          </View>
         </View>
-        <View>
-          <Text style={styles.groupName}>{item.employee.name}</Text>
-          <Text style={styles.groupSub}>
-            {item.recordings.length} recording session{item.recordings.length !== 1 ? 's' : ''}
-          </Text>
-        </View>
+
+        {item.recordings.map((rec, i) => renderRecording(rec, i, item.employee.name))}
+
+        {/* Report section — only visible when shift is ended */}
+        {isShiftEnded && (
+          <View style={styles.reportSection}>
+            {existingReport ? (
+              <TouchableOpacity
+                style={styles.viewReportBtn}
+                onPress={() => Linking.openURL(existingReport.report_url)}
+              >
+                <Text style={styles.viewReportBtnText}>📄 View Shift Report</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={[
+                  styles.generateReportBtn,
+                  (!hasCompletedChunks || isGenerating) && styles.generateReportBtnDisabled,
+                ]}
+                onPress={() => hasCompletedChunks && !isGenerating
+                  ? handleGenerateReport(item.employee.id, item.employee.name)
+                  : undefined
+                }
+                disabled={!hasCompletedChunks || isGenerating}
+              >
+                {isGenerating ? (
+                  <>
+                    <ActivityIndicator size="small" color="#F8FAFC" />
+                    <Text style={styles.generateReportBtnText}>Generating Report…</Text>
+                  </>
+                ) : (
+                  <Text style={[
+                    styles.generateReportBtnText,
+                    !hasCompletedChunks && { color: '#64748B' },
+                  ]}>
+                    {hasCompletedChunks ? '📊 Generate Report' : '📊 No summaries yet'}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
       </View>
-      {item.recordings.map((rec, i) =>
-        renderRecording(rec, i, item.employee.name)
-      )}
-    </View>
-  );
+    );
+  };
 
   if (loading) {
     return (
@@ -458,7 +515,6 @@ export default function ShiftDetailsScreen({ route, navigation }: ShiftDetailsSc
         onClose={() => setShowModal(false)}
         employeeName={selectedEmployee}
         recording={selectedRecording}
-        onRetry={handleRetry}
       />
     </SafeAreaView>
   );
@@ -521,9 +577,7 @@ const styles = StyleSheet.create({
   badgeLive: { backgroundColor: 'rgba(239,68,68,0.2)' },
   badgeFailed: { backgroundColor: 'rgba(71,85,105,0.3)' },
   badgeDone: { backgroundColor: 'rgba(34,197,94,0.15)' },
-  liveBlip: {
-    width: 6, height: 6, borderRadius: 3, backgroundColor: '#EF4444',
-  },
+  liveBlip: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#EF4444' },
   recBadgeText: { fontSize: 10, fontWeight: '700', letterSpacing: 0.4 },
   textLive: { color: '#EF4444' },
   textFailed: { color: '#64748B' },
@@ -543,7 +597,51 @@ const styles = StyleSheet.create({
   },
   summaryBtnReady: { backgroundColor: '#1E3A8A', borderColor: '#3B82F6' },
   summaryBtnProcessing: { backgroundColor: '#1F1C0A', borderColor: '#F59E0B' },
+  summaryBtnPending: { backgroundColor: '#1E293B', borderColor: '#334155' },
   summaryBtnText: { color: '#E2E8F0', fontWeight: '600', fontSize: 12 },
+  // Report section
+  reportSection: {
+    marginTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#334155',
+    paddingTop: 12,
+  },
+  generateReportBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#1E3A4A',
+    borderWidth: 1,
+    borderColor: '#0EA5E9',
+    borderRadius: 10,
+    padding: 12,
+  },
+  generateReportBtnDisabled: {
+    backgroundColor: '#1E293B',
+    borderColor: '#334155',
+  },
+  generateReportBtnText: {
+    color: '#F0F9FF',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  viewReportBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#14532D',
+    borderWidth: 1,
+    borderColor: '#22C55E',
+    borderRadius: 10,
+    padding: 12,
+  },
+  viewReportBtnText: {
+    color: '#DCFCE7',
+    fontWeight: '700',
+    fontSize: 13,
+  },
   emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
   emptyIcon: { fontSize: 52, marginBottom: 14 },
   emptyTitle: { fontSize: 20, fontWeight: '700', color: '#F8FAFC', marginBottom: 8 },
@@ -551,11 +649,7 @@ const styles = StyleSheet.create({
 });
 
 const modalStyles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'flex-end',
-  },
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
   sheet: {
     backgroundColor: '#1E293B',
     borderTopLeftRadius: 20,
@@ -565,90 +659,28 @@ const modalStyles = StyleSheet.create({
     maxHeight: '80%',
   },
   handle: {
-    width: 40,
-    height: 4,
-    backgroundColor: '#334155',
-    borderRadius: 2,
-    alignSelf: 'center',
-    marginTop: 10,
-    marginBottom: 16,
+    width: 40, height: 4, backgroundColor: '#334155', borderRadius: 2,
+    alignSelf: 'center', marginTop: 10, marginBottom: 16,
   },
   title: { fontSize: 18, fontWeight: '700', color: '#F8FAFC', marginBottom: 4 },
   sub: { fontSize: 13, color: '#64748B', marginBottom: 16 },
   body: { maxHeight: 360 },
-  summaryText: {
-    color: '#CBD5E1',
-    fontSize: 14,
-    lineHeight: 22,
-  },
-  stateBox: {
-    alignItems: 'center',
-    paddingVertical: 32,
-    gap: 12,
-  },
+  summaryText: { color: '#CBD5E1', fontSize: 14, lineHeight: 22 },
+  stateBox: { alignItems: 'center', paddingVertical: 32, gap: 12 },
   stateIcon: { fontSize: 36 },
-  stateText: {
-    color: '#94A3B8',
-    fontSize: 14,
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  retryBtn: {
-    backgroundColor: '#3B82F6',
-    borderRadius: 10,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    marginTop: 8,
-  },
-  retryBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+  stateText: { color: '#94A3B8', fontSize: 14, textAlign: 'center', lineHeight: 20 },
   closeBtn: {
-    marginTop: 16,
-    backgroundColor: '#334155',
-    borderRadius: 10,
-    padding: 14,
-    alignItems: 'center',
+    marginTop: 16, backgroundColor: '#334155', borderRadius: 10, padding: 14, alignItems: 'center',
   },
   closeBtnText: { color: '#F8FAFC', fontWeight: '600', fontSize: 14 },
-  // Structured summary sections
-  section: {
-    marginBottom: 16,
-  },
+  section: { marginBottom: 16 },
   sectionTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#94A3B8',
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-    marginBottom: 6,
+    fontSize: 13, fontWeight: '700', color: '#94A3B8',
+    textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 6,
   },
-  sectionBody: {
-    fontSize: 14,
-    color: '#CBD5E1',
-    lineHeight: 21,
-    marginBottom: 4,
-  },
-  subLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#64748B',
-    marginTop: 6,
-    marginBottom: 3,
-  },
-  timelineRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 6,
-  },
-  timelineTime: {
-    fontSize: 12,
-    color: '#3B82F6',
-    fontWeight: '600',
-    minWidth: 60,
-  },
-  timelineActivity: {
-    flex: 1,
-    fontSize: 13,
-    color: '#CBD5E1',
-    lineHeight: 19,
-  },
+  sectionBody: { fontSize: 14, color: '#CBD5E1', lineHeight: 21, marginBottom: 4 },
+  subLabel: { fontSize: 12, fontWeight: '600', color: '#64748B', marginTop: 6, marginBottom: 3 },
+  timelineRow: { flexDirection: 'row', gap: 8, marginBottom: 6 },
+  timelineTime: { fontSize: 12, color: '#3B82F6', fontWeight: '600', minWidth: 60 },
+  timelineActivity: { flex: 1, fontSize: 13, color: '#CBD5E1', lineHeight: 19 },
 });

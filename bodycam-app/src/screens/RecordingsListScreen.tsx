@@ -159,8 +159,10 @@ export default function RecordingsListScreen({ route, navigation }: RecordingsLi
               styles.summaryButton,
               item.processing_status === 'completed' && styles.summaryButtonReady,
               item.processing_status === 'processing' && styles.summaryButtonProcessing,
+              item.processing_status !== 'completed' && item.processing_status !== 'processing' && styles.summaryButtonPending,
             ]}
-            onPress={() => handleViewSummary(item)}
+            onPress={() => item.processing_status === 'completed' ? handleViewSummary(item) : undefined}
+            disabled={item.processing_status !== 'completed'}
           >
             {item.processing_status === 'processing' ? (
               <>
@@ -170,7 +172,7 @@ export default function RecordingsListScreen({ route, navigation }: RecordingsLi
             ) : item.processing_status === 'completed' ? (
               <Text style={styles.summaryButtonText}>🤖 View AI Summary</Text>
             ) : (
-              <Text style={styles.summaryButtonText}>⏱️ Summary Pending</Text>
+              <Text style={[styles.summaryButtonText, { color: '#64748B' }]}>⏳ Pending...</Text>
             )}
           </TouchableOpacity>
         )}
@@ -368,6 +370,11 @@ const styles = StyleSheet.create({
   summaryButtonProcessing: {
     backgroundColor: '#1F1C0A',
     borderColor: '#F59E0B',
+  },
+  summaryButtonPending: {
+    backgroundColor: '#1E293B',
+    borderColor: '#334155',
+    opacity: 0.65,
   },
   summaryButtonText: {
     color: '#E2E8F0',
