@@ -1,15 +1,21 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { useAuth } from '../hooks/useAuth';
+import { useNavigation } from '@react-navigation/native';
 
 export default function SettingsScreen() {
   const { profile, signOut } = useAuth();
+  const navigation = useNavigation<any>();
 
   const handleSignOut = () => {
     Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Sign Out', style: 'destructive', onPress: signOut },
     ]);
+  };
+
+  const handleGoHome = () => {
+    navigation.navigate('Home');
   };
 
   return (
@@ -32,6 +38,10 @@ export default function SettingsScreen() {
           {profile?.role ? profile.role.charAt(0).toUpperCase() + profile.role.slice(1) : '-'}
         </Text>
       </View>
+
+      <TouchableOpacity style={styles.homeButton} onPress={handleGoHome}>
+        <Text style={styles.homeButtonText}>🏠 Back to Home</Text>
+      </TouchableOpacity>
 
       <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
         <Text style={styles.signOutText}>Sign Out</Text>
@@ -73,12 +83,26 @@ const styles = StyleSheet.create({
     color: '#F8FAFC',
     fontWeight: '500',
   },
+  homeButton: {
+    backgroundColor: '#1E3A4A',
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    marginTop: 24,
+    borderWidth: 1,
+    borderColor: '#0EA5E9',
+  },
+  homeButtonText: {
+    color: '#7DD3FC',
+    fontSize: 16,
+    fontWeight: '700',
+  },
   signOutButton: {
     backgroundColor: '#7F1D1D',
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
-    marginTop: 24,
+    marginTop: 12,
   },
   signOutText: {
     color: '#FCA5A5',

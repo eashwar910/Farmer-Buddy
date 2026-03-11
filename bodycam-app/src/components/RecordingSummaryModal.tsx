@@ -24,11 +24,22 @@ export default function RecordingSummaryModal({
   summary,
   loading,
 }: RecordingSummaryModalProps) {
-  // Try to parse summary as JSON
+  // Try to parse summary as JSON (handle double-stringified or markdown-wrapped JSON)
   let parsedSummary: any = null;
   try {
     if (summary) {
-      parsedSummary = JSON.parse(summary);
+      let rawStr = summary.trim();
+      // Strip markdown code fences if AI wrapped JSON in ```json ... ```
+      if (rawStr.startsWith('```')) {
+        rawStr = rawStr.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+      }
+      let firstParse = JSON.parse(rawStr);
+      // Handle double-stringified: if the result is still a string, parse again
+      if (typeof firstParse === 'string') {
+        parsedSummary = JSON.parse(firstParse);
+      } else {
+        parsedSummary = firstParse;
+      }
     }
   } catch {
     // If not valid JSON, display as raw text

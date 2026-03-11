@@ -16,6 +16,8 @@ export type EmployeeTabParamList = {
 
 export type RootStackParamList = {
   Auth: undefined;
+  Home: undefined;
+  LeafDetection: undefined;
   ManagerTabs: undefined;
   EmployeeTabs: undefined;
   RecordingsList: {

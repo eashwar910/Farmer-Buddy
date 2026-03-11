@@ -7,6 +7,8 @@ import ManagerTabs from './ManagerTabs';
 import EmployeeTabs from './EmployeeTabs';
 import RecordingsListScreen from '../screens/RecordingsListScreen';
 import ShiftDetailsScreen from '../screens/ShiftDetailsScreen';
+import HomeScreen from '../screens/HomeScreen';
+import LeafDetectionScreen from '../screens/LeafDetectionScreen';
 import { RootStackParamList } from './types';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -26,20 +28,6 @@ export default function RootNavigator() {
   const isManager = profile?.role === 'manager';
   const isEmployee = profile?.role === 'employee';
 
-  // Logged in but no role assigned yet
-  if (isLoggedIn && !isManager && !isEmployee) {
-    return (
-      <View style={styles.loading}>
-        <Text style={styles.pendingIcon}>⏳</Text>
-        <Text style={styles.pendingTitle}>Role Not Assigned</Text>
-        <Text style={styles.pendingText}>
-          Your account has been created but a role has not been assigned yet.
-          Please contact your administrator.
-        </Text>
-      </View>
-    );
-  }
-
   return (
     <Stack.Navigator
       screenOptions={{
@@ -51,10 +39,17 @@ export default function RootNavigator() {
     >
       {!isLoggedIn ? (
         <Stack.Screen name="Auth" component={AuthStack} />
-      ) : isManager ? (
-        <Stack.Screen name="ManagerTabs" component={ManagerTabs} />
       ) : (
-        <Stack.Screen name="EmployeeTabs" component={EmployeeTabs} />
+        <Stack.Group>
+          <Stack.Screen name="Home" component={HomeScreen} />
+          <Stack.Screen name="ManagerTabs" component={ManagerTabs} />
+          <Stack.Screen name="EmployeeTabs" component={EmployeeTabs} />
+          <Stack.Screen 
+            name="LeafDetection" 
+            component={LeafDetectionScreen}
+            options={{ headerShown: true, title: 'Leaf Detection' }}
+          />
+        </Stack.Group>
       )}
       {/* Shared screens accessible from any tab */}
       <Stack.Screen
@@ -78,21 +73,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 24,
-  },
-  pendingIcon: {
-    fontSize: 48,
-    marginBottom: 16,
-  },
-  pendingTitle: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#F8FAFC',
-    marginBottom: 8,
-  },
-  pendingText: {
-    fontSize: 15,
-    color: '#94A3B8',
-    textAlign: 'center',
-    lineHeight: 22,
   },
 });

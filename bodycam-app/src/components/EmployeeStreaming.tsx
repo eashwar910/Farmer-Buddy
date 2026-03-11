@@ -29,6 +29,7 @@ export default function EmployeeStreaming({ shiftId, employeeName }: EmployeeStr
   const [token, setToken] = useState<string | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [isStopping, setIsStopping] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [egressId, setEgressId] = useState<string | null>(null);
 
@@ -51,24 +52,35 @@ export default function EmployeeStreaming({ shiftId, employeeName }: EmployeeStr
   }, [shiftId, isConnecting]);
 
   const handleStopStreaming = useCallback(async () => {
-    if (egressId) {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        await supabase.functions.invoke('stop-egress', {
-          body: { egressId },
-          headers: session?.access_token
-            ? { Authorization: `Bearer ${session.access_token}` }
-            : undefined,
-        });
-      } catch (err) {
-        console.warn('stop-egress call failed (non-critical):', err);
-      }
-      setEgressId(null);
-    }
-
+    // Update UI immediately for instant feedback
+    setIsStopping(true);
+    const currentEgressId = egressId;
     setToken(null);
     setIsStreaming(false);
-    await AudioSession.stopAudioSession();
+    setEgressId(null);
+    // Stop audio session immediately to free resources
+    AudioSession.stopAudioSession();
+
+    // Fire stop-egress in background — don't wait for it to update UI
+    if (currentEgressId) {
+      (async () => {
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          await supabase.functions.invoke('stop-egress', {
+            body: { egressId: currentEgressId },
+            headers: session?.access_token
+              ? { Authorization: `Bearer ${session.access_token}` }
+              : undefined,
+          });
+        } catch (err) {
+          console.warn('stop-egress call failed (non-critical):', err);
+        } finally {
+          setIsStopping(false);
+        }
+      })();
+    } else {
+      setIsStopping(false);
+    }
   }, [egressId]);
 
   useEffect(() => {
@@ -81,12 +93,17 @@ export default function EmployeeStreaming({ shiftId, employeeName }: EmployeeStr
     return (
       <View style={styles.container}>
         <TouchableOpacity
-          style={[styles.startButton, isConnecting && styles.buttonDisabled]}
+          style={[styles.startButton, (isConnecting || isStopping) && styles.buttonDisabled]}
           onPress={handleStartStreaming}
-          disabled={isConnecting}
+          disabled={isConnecting || isStopping}
         >
           {isConnecting ? (
             <ActivityIndicator color="#fff" />
+          ) : isStopping ? (
+            <>
+              <ActivityIndicator color="#fff" />
+              <Text style={styles.startText}>Stopping...</Text>
+            </>
           ) : (
             <>
               <Text style={styles.startIcon}>📹</Text>
