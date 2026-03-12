@@ -16,8 +16,10 @@ export type EmployeeTabParamList = {
 
 export type RootStackParamList = {
   Auth: undefined;
-  Home: undefined;
+  Home: { skipAutoNav?: boolean } | undefined;
   LeafDetection: undefined;
+  IoTSensorScreen: undefined;
+  SettingsScreen: undefined;
   ManagerTabs: undefined;
   EmployeeTabs: undefined;
   RecordingsList: {

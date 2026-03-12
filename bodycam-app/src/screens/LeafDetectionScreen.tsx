@@ -2,11 +2,13 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, ActivityIndicator } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useAppContext } from '../context/AppContext';
 
 export default function LeafDetectionScreen() {
+  const { themeColors, t } = useAppContext();
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [diseaseName, setDiseaseName] = useState('No result yet');
+  const [diseaseName, setDiseaseName] = useState(t('No result yet'));
   const [confidenceScore, setConfidenceScore] = useState('-');
   const [statusMessage, setStatusMessage] = useState('');
   const [diseaseStatus, setDiseaseStatus] = useState('-');
@@ -27,13 +29,13 @@ export default function LeafDetectionScreen() {
     if (!result.canceled) {
       const asset = result.assets[0];
       if (asset.fileSize && asset.fileSize > MAX_FILE_SIZE_BYTES) {
-        setStatusMessage(`File is too large. Maximum allowed size is ${Math.round(MAX_FILE_SIZE_BYTES / (1024 * 1024))} MB.`);
+        setStatusMessage(`${t('File is too large')}. Maximum allowed size is ${Math.round(MAX_FILE_SIZE_BYTES / (1024 * 1024))} MB.`);
         return;
       }
       setImageUri(asset.uri);
       
       // Reset state
-      setDiseaseName('No result yet');
+      setDiseaseName(t('No result yet'));
       setConfidenceScore('-');
       setDiseaseStatus('-');
       setProbabilities([]);
@@ -42,7 +44,6 @@ export default function LeafDetectionScreen() {
   };
 
   const fileUriToBase64 = async (uri: string): Promise<string> => {
-    // Read the file as base64 using expo-file-system if needed, or fetch it as blob
     const response = await fetch(uri);
     const blob = await response.blob();
     return new Promise((resolve, reject) => {
@@ -58,10 +59,7 @@ export default function LeafDetectionScreen() {
   const callHFSpaceAPI = async (uri: string) => {
     console.log("Attempting API call...");
     try {
-      // Step 1: Convert file to base64
       const fileData = await fileUriToBase64(uri);
-
-      // Step 2: Submit request to the queue
       const submitResponse = await fetch(`${baseURL}/api/queue/join`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -86,7 +84,6 @@ export default function LeafDetectionScreen() {
 
       const queueResponse = await submitResponse.json();
       
-      // Step 3: Poll for result
       if (queueResponse?.hash) {
         let pollCount = 0;
         const maxPolls = 60; // 60 second timeout
@@ -118,13 +115,13 @@ export default function LeafDetectionScreen() {
 
   const detectDisease = async () => {
     if (!imageUri) {
-      setStatusMessage("Please select an image first.");
+      setStatusMessage(t('Please select an image first.'));
       return;
     }
 
     setIsProcessing(true);
-    setStatusMessage("Connecting to Hugging Face Space...");
-    setDiseaseName("Processing...");
+    setStatusMessage(t('Connecting to AI Analysis...'));
+    setDiseaseName(t('Processing...'));
     setConfidenceScore("-");
     setProbabilities([]);
 
@@ -150,7 +147,7 @@ export default function LeafDetectionScreen() {
         } catch {
           setDiseaseName(rawOutput);
           setConfidenceScore("N/A");
-          setStatusMessage("Prediction completed.");
+          setStatusMessage(t('Prediction completed.'));
           setIsProcessing(false);
           return;
         }
@@ -183,12 +180,12 @@ export default function LeafDetectionScreen() {
 
       setDiseaseName(topLabel);
       setConfidenceScore(topConfidence);
-      setStatusMessage("Prediction completed successfully.");
+      setStatusMessage(t('Prediction completed successfully.'));
       setDiseaseStatus(decideDiseaseStatus(topPrediction.label, topPrediction.score));
       setProbabilities(parsedPredictions);
 
     } catch (error: any) {
-      setStatusMessage(`Failed to call the Hugging Face API: ${error.message || String(error)}`);
+      setStatusMessage(`${t('Failed to call AI API')}: ${error.message || String(error)}`);
       setDiseaseName("Error");
     } finally {
       setIsProcessing(false);
@@ -202,17 +199,19 @@ export default function LeafDetectionScreen() {
   };
 
   const decideDiseaseStatus = (label: string, score: number) => {
-    if (label == null) return 'Uncertain';
+    if (label == null) return t('Uncertain');
     const l = String(label).toLowerCase();
     const isHealthyLabel = l.includes('healthy') || l.includes('normal');
 
     if (isHealthyLabel) {
-      if (score >= DECISION_CONFIDENCE_THRESHOLD) return 'Healthy';
-      return 'Uncertain';
+      if (score >= DECISION_CONFIDENCE_THRESHOLD) return t('Healthy');
+      return t('Uncertain');
     }
-    if (score >= DECISION_CONFIDENCE_THRESHOLD) return 'Diseased';
-    return 'Uncertain';
+    if (score >= DECISION_CONFIDENCE_THRESHOLD) return t('Diseased');
+    return t('Uncertain');
   };
+
+  const styles = getStyles(themeColors);
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom', 'left', 'right']}>
@@ -220,7 +219,7 @@ export default function LeafDetectionScreen() {
         
         <View style={styles.uploadSection}>
           <TouchableOpacity style={styles.uploadBtn} onPress={pickImage} disabled={isProcessing}>
-            <Text style={styles.uploadBtnText}>Select Leaf Image</Text>
+            <Text style={styles.uploadBtnText}>{t('Select Leaf Image')}</Text>
           </TouchableOpacity>
         </View>
 
@@ -230,7 +229,7 @@ export default function LeafDetectionScreen() {
           ) : (
             <View style={styles.previewPlaceholder}>
               <Text style={styles.placeholderIcon}>📷</Text>
-              <Text style={styles.placeholderText}>Image preview will appear here</Text>
+              <Text style={styles.placeholderText}>{t('Image preview will appear here')}</Text>
             </View>
           )}
         </View>
@@ -244,7 +243,7 @@ export default function LeafDetectionScreen() {
             {isProcessing ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.detectBtnText}>Detect Disease</Text>
+              <Text style={styles.detectBtnText}>{t('Detect Disease')}</Text>
             )}
           </TouchableOpacity>
         </View>
@@ -254,28 +253,28 @@ export default function LeafDetectionScreen() {
         ) : null}
 
         <View style={styles.resultCard}>
-          <Text style={styles.resultHeader}>Detection Results</Text>
+          <Text style={styles.resultHeader}>{t('Detection Results')}</Text>
           
           <View style={styles.resultRow}>
-            <Text style={styles.resultLabel}>Disease/Condition:</Text>
+            <Text style={styles.resultLabel}>{t('Disease/Condition')}:</Text>
             <Text style={styles.resultValue}>{diseaseName}</Text>
           </View>
           
           <View style={styles.resultRow}>
-            <Text style={styles.resultLabel}>Confidence Score:</Text>
+            <Text style={styles.resultLabel}>{t('Confidence Score')}:</Text>
             <Text style={styles.resultValue}>{confidenceScore}</Text>
           </View>
           
           <View style={styles.resultRow}>
-            <Text style={styles.resultLabel}>Status:</Text>
-            <Text style={[styles.resultValue, diseaseStatus === 'Healthy' ? styles.textGreen : (diseaseStatus === 'Diseased' ? styles.textRed : undefined)]}>
+            <Text style={styles.resultLabel}>{t('Status')}:</Text>
+            <Text style={[styles.resultValue, diseaseStatus === t('Healthy') ? styles.textGreen : (diseaseStatus === t('Diseased') ? styles.textRed : undefined)]}>
               {diseaseStatus}
             </Text>
           </View>
 
           {probabilities.length > 0 && (
             <View style={styles.probabilitiesBox}>
-              <Text style={styles.probabilitiesHeader}>All Predictions:</Text>
+              <Text style={styles.probabilitiesHeader}>{t('All Predictions')}:</Text>
               {probabilities.map((prob, index) => {
                 const label = formatLabel(prob.label || "Unknown");
                 const score = (prob.score || 0) * 100;
@@ -300,10 +299,10 @@ export default function LeafDetectionScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (themeColors: any) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0F172A',
+    backgroundColor: themeColors.background,
   },
   scrollContent: {
     padding: 24,
@@ -313,27 +312,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   uploadBtn: {
-    backgroundColor: '#334155',
+    backgroundColor: themeColors.border,
     paddingVertical: 12,
     paddingHorizontal: 24,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#475569',
+    borderColor: themeColors.border,
   },
   uploadBtnText: {
-    color: '#F8FAFC',
+    color: themeColors.text,
     fontSize: 16,
     fontWeight: '600',
   },
   previewWrapper: {
     width: '100%',
     height: 300,
-    backgroundColor: '#1E293B',
+    backgroundColor: themeColors.card,
     borderRadius: 12,
     overflow: 'hidden',
     marginBottom: 24,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: themeColors.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -349,14 +348,14 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   placeholderText: {
-    color: '#94A3B8',
+    color: themeColors.subtext,
     fontSize: 16,
   },
   actions: {
     marginBottom: 20,
   },
   detectBtn: {
-    backgroundColor: '#10B981',
+    backgroundColor: themeColors.accent,
     paddingVertical: 16,
     borderRadius: 8,
     alignItems: 'center',
@@ -370,52 +369,52 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   statusMessage: {
-    color: '#94A3B8',
+    color: themeColors.subtext,
     textAlign: 'center',
     marginBottom: 20,
     fontSize: 14,
   },
   resultCard: {
-    backgroundColor: '#1E293B',
+    backgroundColor: themeColors.card,
     borderRadius: 12,
     padding: 20,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: themeColors.border,
   },
   resultHeader: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#F8FAFC',
+    color: themeColors.text,
     marginBottom: 16,
   },
   resultRow: {
     marginBottom: 12,
   },
   resultLabel: {
-    color: '#94A3B8',
+    color: themeColors.subtext,
     fontSize: 14,
     marginBottom: 4,
     fontWeight: '500',
   },
   resultValue: {
-    color: '#F8FAFC',
+    color: themeColors.text,
     fontSize: 18,
     fontWeight: '600',
   },
   textGreen: {
-    color: '#10B981',
+    color: themeColors.accent,
   },
   textRed: {
-    color: '#EF4444',
+    color: '#EF4444', // Kept hardcoded but matching the theme requirement for actual alert colors, or can use theme if defined. 
   },
   probabilitiesBox: {
     marginTop: 20,
     paddingTop: 16,
     borderTopWidth: 1,
-    borderTopColor: '#334155',
+    borderTopColor: themeColors.border,
   },
   probabilitiesHeader: {
-    color: '#F8FAFC',
+    color: themeColors.text,
     fontWeight: '600',
     fontSize: 16,
     marginBottom: 12,
@@ -429,23 +428,23 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   probabilityLabel: {
-    color: '#CBD5E1',
+    color: themeColors.subtext,
     fontSize: 14,
   },
   probabilityScore: {
-    color: '#CBD5E1',
+    color: themeColors.subtext,
     fontSize: 14,
     fontWeight: '600',
   },
   probabilityBarBg: {
     height: 8,
-    backgroundColor: '#334155',
+    backgroundColor: themeColors.border,
     borderRadius: 4,
     overflow: 'hidden',
   },
   probabilityBarFill: {
     height: '100%',
-    backgroundColor: '#3B82F6',
+    backgroundColor: themeColors.accent,
     borderRadius: 4,
   },
 });

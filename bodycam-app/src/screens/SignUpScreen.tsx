@@ -14,6 +14,7 @@ import {
 import { useAuth } from '../hooks/useAuth';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AuthStackParamList } from '../navigation/types';
+import { useAppContext } from '../context/AppContext';
 
 type Props = {
   navigation: NativeStackNavigationProp<AuthStackParamList, 'SignUp'>;
@@ -21,6 +22,7 @@ type Props = {
 
 export default function SignUpScreen({ navigation }: Props) {
   const { signUp } = useAuth();
+  const { themeColors, t } = useAppContext();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -29,17 +31,17 @@ export default function SignUpScreen({ navigation }: Props) {
 
   const handleSignUp = async () => {
     if (!name || !email || !password || !confirmPassword) {
-      Alert.alert('Error', 'Please fill in all fields');
+      Alert.alert(t('Error'), t('Please fill in all fields'));
       return;
     }
 
     if (password !== confirmPassword) {
-      Alert.alert('Error', 'Passwords do not match');
+      Alert.alert(t('Error'), t('Passwords do not match'));
       return;
     }
 
     if (password.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters');
+      Alert.alert(t('Error'), t('Password must be at least 6 characters'));
       return;
     }
 
@@ -48,15 +50,17 @@ export default function SignUpScreen({ navigation }: Props) {
     setLoading(false);
 
     if (error) {
-      Alert.alert('Sign Up Failed', error.message);
+      Alert.alert(t('Sign Up Failed'), error.message);
     } else {
       Alert.alert(
-        'Account Created',
-        'Please check your email to verify your account, then sign in.',
-        [{ text: 'OK', onPress: () => navigation.navigate('Login') }]
+        t('Account Created'),
+        t('Please check your email to verify your account, then sign in.'),
+        [{ text: t('OK'), onPress: () => navigation.navigate('Login') }]
       );
     }
   };
+
+  const styles = getStyles(themeColors);
 
   return (
     <KeyboardAvoidingView
@@ -69,26 +73,26 @@ export default function SignUpScreen({ navigation }: Props) {
       >
         <View style={styles.header}>
           <Text style={styles.logo}>📹</Text>
-          <Text style={styles.title}>Create Account</Text>
-          <Text style={styles.subtitle}>Join BodyCam Management</Text>
+          <Text style={styles.title}>{t('Create Account')}</Text>
+          <Text style={styles.subtitle}>{t('Join BodyCam Management')}</Text>
         </View>
 
         <View style={styles.form}>
-          <Text style={styles.label}>Full Name</Text>
+          <Text style={styles.label}>{t('Full Name')}</Text>
           <TextInput
             style={styles.input}
             placeholder="John Doe"
-            placeholderTextColor="#999"
+            placeholderTextColor={themeColors.subtext}
             value={name}
             onChangeText={setName}
             autoCorrect={false}
           />
 
-          <Text style={styles.label}>Email</Text>
+          <Text style={styles.label}>{t('Email')}</Text>
           <TextInput
             style={styles.input}
             placeholder="you@example.com"
-            placeholderTextColor="#999"
+            placeholderTextColor={themeColors.subtext}
             value={email}
             onChangeText={setEmail}
             autoCapitalize="none"
@@ -96,21 +100,21 @@ export default function SignUpScreen({ navigation }: Props) {
             autoCorrect={false}
           />
 
-          <Text style={styles.label}>Password</Text>
+          <Text style={styles.label}>{t('Password')}</Text>
           <TextInput
             style={styles.input}
-            placeholder="Min 6 characters"
-            placeholderTextColor="#999"
+            placeholder={t('Min 6 characters')}
+            placeholderTextColor={themeColors.subtext}
             value={password}
             onChangeText={setPassword}
             secureTextEntry
           />
 
-          <Text style={styles.label}>Confirm Password</Text>
+          <Text style={styles.label}>{t('Confirm Password')}</Text>
           <TextInput
             style={styles.input}
-            placeholder="Re-enter password"
-            placeholderTextColor="#999"
+            placeholder={t('Re-enter password')}
+            placeholderTextColor={themeColors.subtext}
             value={confirmPassword}
             onChangeText={setConfirmPassword}
             secureTextEntry
@@ -124,7 +128,7 @@ export default function SignUpScreen({ navigation }: Props) {
             {loading ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.buttonText}>Create Account</Text>
+              <Text style={styles.buttonText}>{t('Create Account')}</Text>
             )}
           </TouchableOpacity>
 
@@ -133,7 +137,7 @@ export default function SignUpScreen({ navigation }: Props) {
             onPress={() => navigation.navigate('Login')}
           >
             <Text style={styles.linkText}>
-              Already have an account? <Text style={styles.linkBold}>Sign In</Text>
+              {t('Already have an account?')} <Text style={styles.linkBold}>{t('Sign In')}</Text>
             </Text>
           </TouchableOpacity>
         </View>
@@ -142,10 +146,10 @@ export default function SignUpScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (themeColors: any) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0F172A',
+    backgroundColor: themeColors.background,
   },
   scrollContent: {
     flexGrow: 1,
@@ -163,11 +167,11 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: '700',
-    color: '#F8FAFC',
+    color: themeColors.text,
   },
   subtitle: {
     fontSize: 16,
-    color: '#94A3B8',
+    color: themeColors.subtext,
     marginTop: 4,
   },
   form: {
@@ -176,21 +180,21 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#CBD5E1',
+    color: themeColors.subtext,
     marginBottom: 6,
     marginTop: 16,
   },
   input: {
-    backgroundColor: '#1E293B',
+    backgroundColor: themeColors.card,
     borderRadius: 12,
     padding: 16,
     fontSize: 16,
-    color: '#F8FAFC',
+    color: themeColors.text,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: themeColors.border,
   },
   button: {
-    backgroundColor: '#3B82F6',
+    backgroundColor: themeColors.accent,
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
@@ -209,11 +213,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   linkText: {
-    color: '#94A3B8',
+    color: themeColors.subtext,
     fontSize: 14,
   },
   linkBold: {
-    color: '#3B82F6',
+    color: themeColors.accent,
     fontWeight: '600',
   },
 });

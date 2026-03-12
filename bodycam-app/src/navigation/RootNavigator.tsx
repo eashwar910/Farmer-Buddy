@@ -9,6 +9,8 @@ import RecordingsListScreen from '../screens/RecordingsListScreen';
 import ShiftDetailsScreen from '../screens/ShiftDetailsScreen';
 import HomeScreen from '../screens/HomeScreen';
 import LeafDetectionScreen from '../screens/LeafDetectionScreen';
+import IoTSensorScreen from '../screens/IoTSensorScreen';
+import SettingsScreen from '../screens/SettingsScreen';
 import { RootStackParamList } from './types';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -42,12 +44,30 @@ export default function RootNavigator() {
       ) : (
         <Stack.Group>
           <Stack.Screen name="Home" component={HomeScreen} />
-          <Stack.Screen name="ManagerTabs" component={ManagerTabs} />
-          <Stack.Screen name="EmployeeTabs" component={EmployeeTabs} />
+          <Stack.Screen 
+            name="ManagerTabs" 
+            component={ManagerTabs} 
+            options={{ headerShown: true, title: 'Bodycam Manager' }} 
+          />
+          <Stack.Screen 
+            name="EmployeeTabs" 
+            component={EmployeeTabs} 
+            options={{ headerShown: true, title: 'Bodycam App' }} 
+          />
           <Stack.Screen 
             name="LeafDetection" 
             component={LeafDetectionScreen}
             options={{ headerShown: true, title: 'Leaf Detection' }}
+          />
+          <Stack.Screen 
+            name="IoTSensorScreen" 
+            component={IoTSensorScreen}
+            options={{ headerShown: true, title: 'Farm Sensor Analysis' }}
+          />
+          <Stack.Screen 
+            name="SettingsScreen" 
+            component={SettingsScreen}
+            options={{ headerShown: true, title: 'Settings' }}
           />
         </Stack.Group>
       )}

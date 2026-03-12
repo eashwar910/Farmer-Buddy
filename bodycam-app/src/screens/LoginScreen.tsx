@@ -14,6 +14,7 @@ import {
 import { useAuth } from '../hooks/useAuth';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AuthStackParamList } from '../navigation/types';
+import { useAppContext } from '../context/AppContext';
 
 type Props = {
   navigation: NativeStackNavigationProp<AuthStackParamList, 'Login'>;
@@ -21,13 +22,14 @@ type Props = {
 
 export default function LoginScreen({ navigation }: Props) {
   const { signIn } = useAuth();
+  const { themeColors, t } = useAppContext();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
     if (!email || !password) {
-      Alert.alert('Error', 'Please fill in all fields');
+      Alert.alert(t('Error'), t('Please fill in all fields'));
       return;
     }
 
@@ -36,9 +38,11 @@ export default function LoginScreen({ navigation }: Props) {
     setLoading(false);
 
     if (error) {
-      Alert.alert('Login Failed', error.message);
+      Alert.alert(t('Login Failed'), error.message);
     }
   };
+
+  const styles = getStyles(themeColors);
 
   return (
     <KeyboardAvoidingView
@@ -52,15 +56,15 @@ export default function LoginScreen({ navigation }: Props) {
         <View style={styles.header}>
           <Text style={styles.logo}>📹</Text>
           <Text style={styles.title}>BodyCam</Text>
-          <Text style={styles.subtitle}>Employee Management</Text>
+          <Text style={styles.subtitle}>{t('Employee Management')}</Text>
         </View>
 
         <View style={styles.form}>
-          <Text style={styles.label}>Email</Text>
+          <Text style={styles.label}>{t('Email')}</Text>
           <TextInput
             style={styles.input}
             placeholder="you@example.com"
-            placeholderTextColor="#999"
+            placeholderTextColor={themeColors.subtext}
             value={email}
             onChangeText={setEmail}
             autoCapitalize="none"
@@ -68,11 +72,11 @@ export default function LoginScreen({ navigation }: Props) {
             autoCorrect={false}
           />
 
-          <Text style={styles.label}>Password</Text>
+          <Text style={styles.label}>{t('Password')}</Text>
           <TextInput
             style={styles.input}
-            placeholder="Your password"
-            placeholderTextColor="#999"
+            placeholder={t('Your password')}
+            placeholderTextColor={themeColors.subtext}
             value={password}
             onChangeText={setPassword}
             secureTextEntry
@@ -86,7 +90,7 @@ export default function LoginScreen({ navigation }: Props) {
             {loading ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.buttonText}>Sign In</Text>
+              <Text style={styles.buttonText}>{t('Sign In')}</Text>
             )}
           </TouchableOpacity>
 
@@ -95,7 +99,7 @@ export default function LoginScreen({ navigation }: Props) {
             onPress={() => navigation.navigate('SignUp')}
           >
             <Text style={styles.linkText}>
-              Don't have an account? <Text style={styles.linkBold}>Sign Up</Text>
+              {t("Don't have an account?")} <Text style={styles.linkBold}>{t('Sign Up')}</Text>
             </Text>
           </TouchableOpacity>
         </View>
@@ -104,10 +108,10 @@ export default function LoginScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (themeColors: any) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0F172A',
+    backgroundColor: themeColors.background,
   },
   scrollContent: {
     flexGrow: 1,
@@ -125,12 +129,12 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 32,
     fontWeight: '700',
-    color: '#F8FAFC',
+    color: themeColors.text,
     letterSpacing: 1,
   },
   subtitle: {
     fontSize: 16,
-    color: '#94A3B8',
+    color: themeColors.subtext,
     marginTop: 4,
   },
   form: {
@@ -139,21 +143,21 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#CBD5E1',
+    color: themeColors.subtext,
     marginBottom: 6,
     marginTop: 16,
   },
   input: {
-    backgroundColor: '#1E293B',
+    backgroundColor: themeColors.card,
     borderRadius: 12,
     padding: 16,
     fontSize: 16,
-    color: '#F8FAFC',
+    color: themeColors.text,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: themeColors.border,
   },
   button: {
-    backgroundColor: '#3B82F6',
+    backgroundColor: themeColors.accent,
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
@@ -172,11 +176,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   linkText: {
-    color: '#94A3B8',
+    color: themeColors.subtext,
     fontSize: 14,
   },
   linkBold: {
-    color: '#3B82F6',
+    color: themeColors.accent,
     fontWeight: '600',
   },
 });

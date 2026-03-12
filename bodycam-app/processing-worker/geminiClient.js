@@ -65,7 +65,7 @@ export async function summarizeKeyframes(keyframes, genAI) {
 
   try {
     // Use Gemini 1.5 Flash model (optimized for speed and cost)
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
     // Build the content array with prompt + images
     const contents = [

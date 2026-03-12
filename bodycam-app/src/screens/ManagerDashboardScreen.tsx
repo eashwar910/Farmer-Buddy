@@ -19,6 +19,7 @@ import { supabase } from '../services/supabase';
 import { UserProfile } from '../types';
 import ManagerLiveGrid from '../components/ManagerLiveGrid';
 import { RootStackParamList } from '../navigation/types';
+import { useAppContext } from '../context/AppContext';
 
 function formatTime(totalSeconds: number): string {
   const h = Math.floor(totalSeconds / 3600);
@@ -40,6 +41,7 @@ export default function ManagerDashboardScreen() {
   const { profile, signOut } = useAuth();
   const { activeShift, startShift, endShift, elapsedSeconds, loading: shiftLoading } = useShift();
   const { isUserOnline } = usePresence(profile?.id, profile?.name, profile?.role);
+  const { themeColors, t } = useAppContext();
   const [employees, setEmployees] = useState<UserProfile[]>([]);
   const [actionLoading, setActionLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -126,7 +128,7 @@ export default function ManagerDashboardScreen() {
     actionLockRef.current = false;
 
     if (error) {
-      Alert.alert('Error', error.message);
+      Alert.alert(t('Error'), error.message);
     }
   };
 
@@ -134,12 +136,12 @@ export default function ManagerDashboardScreen() {
     if (actionLockRef.current) return;
 
     Alert.alert(
-      'End Shift',
-      'Are you sure you want to end the current shift? All employees will be notified.',
+      t('End Shift'),
+      t('Are you sure you want to end the current shift? All employees will be notified.'),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('Cancel'), style: 'cancel' },
         {
-          text: 'End Shift',
+          text: t('End Shift'),
           style: 'destructive',
           onPress: async () => {
             actionLockRef.current = true;
@@ -152,7 +154,7 @@ export default function ManagerDashboardScreen() {
             actionLockRef.current = false;
 
             if (error) {
-              Alert.alert('Error', error.message);
+              Alert.alert(t('Error'), error.message);
             } else if (shiftIdSnapshot) {
               // Fire-and-forget: trigger report generation for each employee
               triggerReportsForShift(shiftIdSnapshot);
@@ -205,9 +207,9 @@ export default function ManagerDashboardScreen() {
   };
 
   const handleSignOut = () => {
-    Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Sign Out', style: 'destructive', onPress: signOut },
+    Alert.alert(t('Sign Out'), t('Are you sure you want to sign out?'), [
+      { text: t('Cancel'), style: 'cancel' },
+      { text: t('Sign Out'), style: 'destructive', onPress: signOut },
     ]);
   };
 
@@ -229,12 +231,14 @@ export default function ManagerDashboardScreen() {
         <View style={styles.statusBadge}>
           <View style={[styles.statusDot, online ? styles.statusDotOnline : styles.statusDotOffline]} />
           <Text style={[styles.statusLabel, online ? styles.statusLabelOnline : styles.statusLabelOffline]}>
-            {online ? 'Online' : 'Offline'}
+            {online ? t('Online') : t('Offline')}
           </Text>
         </View>
       </View>
     );
   };
+
+  const styles = getStyles(themeColors);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -246,18 +250,18 @@ export default function ManagerDashboardScreen() {
         <RefreshControl
           refreshing={refreshing}
           onRefresh={handleRefresh}
-          tintColor="#3B82F6"
-          colors={['#3B82F6']}
+          tintColor={themeColors.accent}
+          colors={[themeColors.accent]}
         />
       }
     >
       <View style={styles.headerBar}>
         <View>
-          <Text style={styles.greeting}>Welcome back,</Text>
+          <Text style={styles.greeting}>{t('welcome')},</Text>
           <Text style={styles.name}>{profile?.name || 'Manager'}</Text>
         </View>
         <TouchableOpacity onPress={handleSignOut} style={styles.signOutBtn}>
-          <Text style={styles.signOutText}>Sign Out</Text>
+          <Text style={styles.signOutText}>{t('Sign Out')}</Text>
         </TouchableOpacity>
       </View>
 
@@ -268,7 +272,7 @@ export default function ManagerDashboardScreen() {
             <View style={styles.shiftHeader}>
               <View style={styles.shiftLiveIndicator}>
                 <View style={styles.liveDot} />
-                <Text style={styles.liveText}>SHIFT ACTIVE</Text>
+                <Text style={styles.liveText}>{t('SHIFT ACTIVE')}</Text>
               </View>
               <Text style={styles.shiftTimer}>{formatTime(elapsedSeconds)}</Text>
             </View>
@@ -280,14 +284,14 @@ export default function ManagerDashboardScreen() {
               {actionLoading ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <Text style={styles.shiftButtonText}>End Shift</Text>
+                <Text style={styles.shiftButtonText}>{t('End Shift')}</Text>
               )}
             </TouchableOpacity>
           </>
         ) : (
           <>
             <View style={styles.shiftHeader}>
-              <Text style={styles.shiftIdleText}>No active shift</Text>
+              <Text style={styles.shiftIdleText}>{t('No active shift')}</Text>
             </View>
             <TouchableOpacity
               style={[styles.shiftButton, styles.startShiftButton, actionLoading && styles.buttonDisabled]}
@@ -297,7 +301,7 @@ export default function ManagerDashboardScreen() {
               {actionLoading ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <Text style={styles.shiftButtonText}>Start Shift</Text>
+                <Text style={styles.shiftButtonText}>{t('Start Shift')}</Text>
               )}
             </TouchableOpacity>
           </>
@@ -307,7 +311,7 @@ export default function ManagerDashboardScreen() {
       {/* Live Video Grid (only during active shift) */}
       {activeShift && (
         <View style={styles.liveGridSection}>
-          <Text style={styles.sectionTitle}>Live Feeds</Text>
+          <Text style={styles.sectionTitle}>{t('Live Feeds')}</Text>
           <ManagerLiveGrid shiftId={activeShift.id} />
         </View>
       )}
@@ -315,7 +319,7 @@ export default function ManagerDashboardScreen() {
       {/* Recordings section (visible during active shift) */}
       {activeShift && recordingSummaries.length > 0 && (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>📼 Recordings</Text>
+          <Text style={styles.sectionTitle}>📼 {t('Recordings')}</Text>
           {employees
             .filter((e) => recordingSummaries.find((r) => r.employee_id === e.id))
             .map((emp) => {
@@ -337,7 +341,7 @@ export default function ManagerDashboardScreen() {
                   <View style={styles.recordingInfo}>
                     <Text style={styles.recordingName}>{emp.name}</Text>
                     <Text style={styles.recordingCount}>
-                      {count} recording{count !== 1 ? 's' : ''}
+                      {count} {t('recording')}{count !== 1 ? 's' : ''}
                       {summaryCount > 0 ? ` · ${summaryCount} AI ${summaryCount !== 1 ? 'summaries' : 'summary'} ready` : ''}
                     </Text>
                   </View>
@@ -351,14 +355,14 @@ export default function ManagerDashboardScreen() {
       {/* Employee List */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>
-          Employees ({employees.length}) — {onlineCount} online
+          {t('Employees')} ({employees.length}) — {onlineCount} online
         </Text>
         {employees.length === 0 ? (
           <View style={styles.emptyState}>
             <Text style={styles.emptyIcon}>👥</Text>
-            <Text style={styles.emptyText}>No employees yet</Text>
+            <Text style={styles.emptyText}>{t('No employees yet')}</Text>
             <Text style={styles.emptySubtext}>
-              Employees will appear here once their accounts are created and assigned the employee role.
+              {t('Employees will appear here once their accounts are created and assigned the employee role.')}
             </Text>
           </View>
         ) : (
@@ -378,7 +382,7 @@ export default function ManagerDashboardScreen() {
                 <View style={styles.statusBadge}>
                   <View style={[styles.statusDot, online ? styles.statusDotOnline : styles.statusDotOffline]} />
                   <Text style={[styles.statusLabel, online ? styles.statusLabelOnline : styles.statusLabelOffline]}>
-                    {online ? 'Online' : 'Offline'}
+                    {online ? t('Online') : t('Offline')}
                   </Text>
                 </View>
               </View>
@@ -391,14 +395,14 @@ export default function ManagerDashboardScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (themeColors: any) => StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#0F172A',
+    backgroundColor: themeColors.background,
   },
   container: {
     flex: 1,
-    backgroundColor: '#0F172A',
+    backgroundColor: themeColors.background,
   },
   scrollContent: {
     paddingTop: 60,
@@ -413,20 +417,20 @@ const styles = StyleSheet.create({
   },
   greeting: {
     fontSize: 14,
-    color: '#94A3B8',
+    color: themeColors.subtext,
   },
   name: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#F8FAFC',
+    color: themeColors.text,
   },
   signOutBtn: {
-    backgroundColor: '#1E293B',
+    backgroundColor: themeColors.card,
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: themeColors.border,
   },
   signOutText: {
     color: '#EF4444',
@@ -435,17 +439,17 @@ const styles = StyleSheet.create({
   },
   // Shift Card
   shiftCard: {
-    backgroundColor: '#1E293B',
+    backgroundColor: themeColors.card,
     marginHorizontal: 24,
     borderRadius: 16,
     padding: 20,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: themeColors.border,
     marginBottom: 20,
   },
   shiftCardActive: {
-    borderColor: '#22C55E',
-    backgroundColor: '#0D2818',
+    borderColor: themeColors.accent,
+    backgroundColor: themeColors.background,
   },
   shiftHeader: {
     flexDirection: 'row',
@@ -461,24 +465,24 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: '#22C55E',
+    backgroundColor: themeColors.accent,
     marginRight: 8,
   },
   liveText: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#22C55E',
+    color: themeColors.accent,
     letterSpacing: 1,
   },
   shiftTimer: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#F8FAFC',
+    color: themeColors.text,
     fontVariant: ['tabular-nums'],
   },
   shiftIdleText: {
     fontSize: 16,
-    color: '#64748B',
+    color: themeColors.subtext,
   },
   shiftButton: {
     borderRadius: 12,
@@ -486,7 +490,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   startShiftButton: {
-    backgroundColor: '#22C55E',
+    backgroundColor: themeColors.accent,
   },
   endShiftButton: {
     backgroundColor: '#EF4444',
@@ -508,12 +512,12 @@ const styles = StyleSheet.create({
   recordingCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1E293B',
+    backgroundColor: themeColors.card,
     borderRadius: 10,
     padding: 14,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: themeColors.border,
   },
   recordingInfo: {
     flex: 1,
@@ -521,16 +525,16 @@ const styles = StyleSheet.create({
   recordingName: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#F8FAFC',
+    color: themeColors.text,
   },
   recordingCount: {
     fontSize: 12,
-    color: '#22C55E',
+    color: themeColors.accent,
     marginTop: 2,
   },
   recordingArrow: {
     fontSize: 22,
-    color: '#64748B',
+    color: themeColors.subtext,
   },
   // Employee List
   section: {
@@ -540,27 +544,27 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#F8FAFC',
+    color: themeColors.text,
     marginBottom: 12,
   },
   list: {
     paddingBottom: 20,
   },
   employeeCard: {
-    backgroundColor: '#1E293B',
+    backgroundColor: themeColors.card,
     borderRadius: 12,
     padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: themeColors.border,
     marginBottom: 8,
   },
   avatar: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#3B82F6',
+    backgroundColor: themeColors.accent,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
@@ -576,17 +580,17 @@ const styles = StyleSheet.create({
   employeeName: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#F8FAFC',
+    color: themeColors.text,
   },
   employeeEmail: {
     fontSize: 13,
-    color: '#94A3B8',
+    color: themeColors.subtext,
     marginTop: 2,
   },
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#0F172A',
+    backgroundColor: themeColors.background,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
@@ -598,20 +602,20 @@ const styles = StyleSheet.create({
     marginRight: 6,
   },
   statusDotOnline: {
-    backgroundColor: '#22C55E',
+    backgroundColor: themeColors.accent,
   },
   statusDotOffline: {
-    backgroundColor: '#475569',
+    backgroundColor: themeColors.border,
   },
   statusLabel: {
     fontSize: 12,
     fontWeight: '600',
   },
   statusLabelOnline: {
-    color: '#22C55E',
+    color: themeColors.accent,
   },
   statusLabelOffline: {
-    color: '#64748B',
+    color: themeColors.subtext,
   },
   emptyState: {
     alignItems: 'center',
@@ -624,11 +628,11 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#F8FAFC',
+    color: themeColors.text,
   },
   emptySubtext: {
     fontSize: 14,
-    color: '#94A3B8',
+    color: themeColors.subtext,
     marginTop: 8,
     textAlign: 'center',
     lineHeight: 20,
