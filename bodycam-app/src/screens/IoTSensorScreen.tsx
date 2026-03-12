@@ -272,7 +272,7 @@ export default function IoTSensorScreen() {
 
     let prompt = `${languageInstruction}
 
-You are an expert agricultural advisor specialized in Southeast Asian farming, particularly Malaysia. A farmer has shared their IoT sensor readings with you.
+You are an expert agricultural advisor for Malaysian farmers. Analyze the sensor readings below and respond concisely.
 
 Sensor Readings:
 ${sensorText}
@@ -284,16 +284,18 @@ Farm Context:
 - Location: ${farmContext.location || 'Not specified'}
 - Recent Observations: ${farmContext.observations || 'None'}
 
-Your task:
-1. Give a plain-language summary of what the overall readings indicate about the farm's current condition (2–3 sentences, written for a non-expert farmer).
-2. Identify any readings that are outside the healthy/optimal range for the specified crop or farm type in Malaysia/SEA climate. List each one with:
-   - What the reading is
-   - What it should ideally be
-   - What risk or problem it indicates
-3. Give 3 to 5 prioritized, actionable recommendations the farmer can act on today. Keep them practical, low-cost, and locally relevant (e.g., reference locally available fertilizers, Malaysian weather patterns, etc.).
-4. Give a short outlook: if nothing is done, what is likely to happen in the next 7–14 days?
+Rules:
+- If all readings are within healthy range: write ONE short paragraph saying conditions are good and why.
+- If there are issues: respond in exactly two sections using this format:
 
-Respond in a warm, encouraging tone. If the location is in Malaysia, use Malaysian context (local crop names, seasons, suppliers if known). Do not use markdown formatting such as ###, **, or --. Use plain text with numbered sections only.`;
+Issues Found:
+[bullet list of problems, one line each]
+
+Next Steps:
+[bullet list of actions, one line each]
+
+- Be direct and practical. No greetings, no filler sentences. Maximum 150 words total.
+- Do not use markdown such as ###, **, or --. Use plain text only.`;
 
     try {
       const responseText = await analyzeFarmData(prompt);
