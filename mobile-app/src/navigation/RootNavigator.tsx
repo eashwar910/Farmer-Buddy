@@ -1,0 +1,97 @@
+import React from 'react';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { ActivityIndicator, View, Text, StyleSheet } from 'react-native';
+import { useAuth } from '../hooks/useAuth';
+import AuthStack from './AuthStack';
+import ManagerTabs from './ManagerTabs';
+import EmployeeTabs from './EmployeeTabs';
+import RecordingsListScreen from '../screens/RecordingsListScreen';
+import ShiftDetailsScreen from '../screens/ShiftDetailsScreen';
+import HomeScreen from '../screens/HomeScreen';
+import LeafDetectionScreen from '../screens/LeafDetectionScreen';
+import IoTSensorScreen from '../screens/IoTSensorScreen';
+import SettingsScreen from '../screens/SettingsScreen';
+import { RootStackParamList } from './types';
+
+const Stack = createNativeStackNavigator<RootStackParamList>();
+
+export default function RootNavigator() {
+  const { session, profile, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <View style={styles.loading}>
+        <ActivityIndicator size="large" color="#3B82F6" />
+      </View>
+    );
+  }
+
+  const isLoggedIn = !!session;
+  const isManager = profile?.role === 'manager';
+  const isEmployee = profile?.role === 'employee';
+
+  return (
+    <Stack.Navigator
+      screenOptions={{
+        headerShown: false,
+        headerStyle: { backgroundColor: '#0F172A' },
+        headerTintColor: '#F8FAFC',
+        headerTitleStyle: { fontWeight: '700' },
+      }}
+    >
+      {!isLoggedIn ? (
+        <Stack.Screen name="Auth" component={AuthStack} />
+      ) : (
+        <Stack.Group>
+          <Stack.Screen name="Home" component={HomeScreen} />
+          <Stack.Screen 
+            name="ManagerTabs" 
+            component={ManagerTabs} 
+            options={{ headerShown: true, title: 'Bodycam Manager' }} 
+          />
+          <Stack.Screen 
+            name="EmployeeTabs" 
+            component={EmployeeTabs} 
+            options={{ headerShown: true, title: 'Bodycam App' }} 
+          />
+          <Stack.Screen 
+            name="LeafDetection" 
+            component={LeafDetectionScreen}
+            options={{ headerShown: true, title: 'Leaf Detection' }}
+          />
+          <Stack.Screen 
+            name="IoTSensorScreen" 
+            component={IoTSensorScreen}
+            options={{ headerShown: true, title: 'Farm Sensor Analysis' }}
+          />
+          <Stack.Screen 
+            name="SettingsScreen" 
+            component={SettingsScreen}
+            options={{ headerShown: true, title: 'Settings' }}
+          />
+        </Stack.Group>
+      )}
+      {/* Shared screens accessible from any tab */}
+      <Stack.Screen
+        name="RecordingsList"
+        component={RecordingsListScreen}
+        options={{ headerShown: true, title: 'Recordings' }}
+      />
+      <Stack.Screen
+        name="ShiftDetails"
+        component={ShiftDetailsScreen}
+        options={{ headerShown: true, title: 'Shift Details' }}
+      />
+    </Stack.Navigator>
+  );
+}
+
+const styles = StyleSheet.create({
+  loading: {
+    flex: 1,
+    backgroundColor: '#0F172A',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+});

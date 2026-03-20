@@ -1,0 +1,16 @@
+-- =============================================
+-- BodyCam App - Seed Reference (SQL)
+-- =============================================
+-- 
+-- Preferred method: use the Node.js seed script (scripts/seed.ts).
+-- 
+-- Alternatively, create users manually in the Supabase Dashboard:
+--
+-- 1. Go to Authentication > Users > Add User > Create New User
+-- 2. Create these accounts (password: Test1234!):
+--      - manager@test.com
+--      - employee@test.com
+--
+-- 3. Then run supabase/assign_roles.sql to assign roles.
+--
+-- =============================================
