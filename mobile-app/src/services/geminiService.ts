@@ -1,9 +1,7 @@
 import { GEMINI_API_KEY } from '@env';
 
 const MODELS_TO_TRY = [
-  'gemini-3.1-flash-lite',
-  'gemini-3',
-  'gemini-3.1-pro'
+  'gemini-2.5-flash'
 ];
 
 export const analyzeFarmData = async (prompt: string): Promise<string> => {

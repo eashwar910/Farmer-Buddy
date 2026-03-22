@@ -19,6 +19,7 @@ export type RootStackParamList = {
   Home: { skipAutoNav?: boolean } | undefined;
   LeafDetection: undefined;
   IoTSensorScreen: undefined;
+  AgronomistChat: undefined;
   SettingsScreen: undefined;
   ManagerTabs: undefined;
   EmployeeTabs: undefined;

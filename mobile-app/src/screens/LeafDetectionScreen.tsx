@@ -13,23 +13,7 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppContext } from '../context/AppContext';
-import { GEMINI_API_KEY } from '@env';
-
-const LEAF_PROMPT = `You are an expert plant pathologist. Analyze this plant leaf image carefully.
-
-Respond ONLY with a valid JSON object in this exact format (no markdown, no extra text):
-{
-  "disease_name": "Name of disease or condition (use 'Healthy' if no disease found)",
-  "confidence": 0.95,
-  "status": "Healthy" or "Diseased" or "Uncertain",
-  "description": "Brief 1-2 sentence description of the condition and recommended action",
-  "all_observations": [
-    { "label": "Observation name", "likelihood": 0.95 },
-    { "label": "Another observation", "likelihood": 0.03 }
-  ]
-}
-
-Focus on: disease symptoms, leaf color, spots, lesions, wilting, or any abnormalities visible.`;
+const DECISION_CONFIDENCE_THRESHOLD = 0.6; // 60%
 
 async function uriToBase64(uri: string): Promise<{ data: string; mimeType: string }> {
   const res = await fetch(uri);
@@ -47,54 +31,144 @@ async function uriToBase64(uri: string): Promise<{ data: string; mimeType: strin
   });
 }
 
-const MODELS_TO_TRY = [
-  'gemini-3.1-flash-lite',
-  'gemini-3',
-  'gemini-3.1-pro'
-];
+async function callHFSpaceAPI(base64DataUrl: string) {
+  const baseURL = "https://moazx-plant-leaf-diseases-detection-using-cnn.hf.space";
+  
+  try {
+    const submitResponse = await fetch(`${baseURL}/api/queue/join`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ data: [base64DataUrl], fn_index: 0 })
+    });
 
-async function analyzeWithGemini(uri: string) {
-  const { data, mimeType } = await uriToBase64(uri);
-
-  const body = {
-    contents: [{
-      parts: [
-        { text: LEAF_PROMPT },
-        { inline_data: { mime_type: mimeType, data } },
-      ],
-    }],
-    generationConfig: { temperature: 0.1, maxOutputTokens: 512 },
-  };
-
-  let lastError: any;
-
-  for (const model of MODELS_TO_TRY) {
-    try {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+    if (!submitResponse.ok) {
+      const altResponse = await fetch(`${baseURL}/api/predict`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ data: [base64DataUrl] })
       });
-
-      if (!res.ok) {
-        const errText = await res.text().catch(() => res.statusText);
-        throw new Error(`Gemini API error ${res.status} (${model}): ${errText}`);
+      if (!altResponse.ok) {
+        throw new Error(`Both endpoints failed. Queue: ${submitResponse.status}`);
       }
+      return await altResponse.json();
+    }
 
-      const json = await res.json();
-      const text: string = json.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+    const queueResponse = await submitResponse.json();
+    if (queueResponse?.hash) {
+      let pollCount = 0;
+      while (pollCount < 60) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        const statusResponse = await fetch(`${baseURL}/api/queue/join`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ hash: queueResponse.hash })
+        });
 
-      // Strip markdown code fences if Gemini wraps the JSON
-      const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-      return JSON.parse(cleaned);
-    } catch (err: any) {
-      console.warn(`[Gemini Fallback] Leaf Detection: ${model} failed`, err.message);
-      lastError = err;
+        if (statusResponse.ok) {
+          const status = await statusResponse.json();
+          if (status?.status === "COMPLETE" && status?.data) {
+             return { data: status.data };
+          }
+          if (status?.data && Array.isArray(status.data)) {
+             return { data: status.data };
+          }
+        }
+        pollCount++;
+      }
+      throw new Error("Polling timeout - no result received after 60 seconds");
+    }
+    return { data: queueResponse?.data || queueResponse };
+  } catch (error) {
+    throw error;
+  }
+}
+
+function formatLabel(label: string) {
+  return String(label)
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, char => char.toUpperCase());
+}
+
+function decideDiseaseStatus(label: string, score: number) {
+  if (label == null) return 'Uncertain';
+  const l = String(label).toLowerCase();
+  const isHealthyLabel = l.includes('healthy') || l.includes('normal');
+
+  if (isHealthyLabel) {
+    if (score >= DECISION_CONFIDENCE_THRESHOLD) return 'Healthy';
+    return 'Uncertain';
+  }
+  if (score >= DECISION_CONFIDENCE_THRESHOLD) return 'Diseased';
+  return 'Uncertain';
+}
+
+async function analyzeWithHuggingFace(uri: string) {
+  const { data, mimeType } = await uriToBase64(uri);
+  const dataUrl = `data:${mimeType};base64,${data}`;
+
+  const result = await callHFSpaceAPI(dataUrl);
+
+  let rawOutput = null;
+  if (result?.data !== undefined) {
+    if (Array.isArray(result.data)) {
+      rawOutput = result.data[0];
+    } else {
+      rawOutput = result.data;
+    }
+  } else if (Array.isArray(result)) {
+    rawOutput = result[0];
+  } else {
+    rawOutput = result;
+  }
+
+  let parsedPredictions: any[] = [];
+  if (Array.isArray(rawOutput)) {
+    parsedPredictions = rawOutput;
+  } else if (typeof rawOutput === "string") {
+    try {
+      const parsed = JSON.parse(rawOutput);
+      if (Array.isArray(parsed)) {
+        parsedPredictions = parsed;
+      } else if (parsed?.data && Array.isArray(parsed.data)) {
+        parsedPredictions = parsed.data;
+      } else {
+        parsedPredictions = [parsed];
+      }
+    } catch {
+      parsedPredictions = [{ label: rawOutput, score: 0 }];
+    }
+  } else if (typeof rawOutput === "object" && rawOutput !== null) {
+    if (rawOutput.confidences && Array.isArray(rawOutput.confidences)) {
+      parsedPredictions = rawOutput.confidences.map((c: any) => ({
+        label: c.label,
+        score: c.confidence || c.score || 0
+      }));
+    } else if (rawOutput.label !== undefined || rawOutput.score !== undefined) {
+      parsedPredictions = [rawOutput];
+    } else if (rawOutput.predictions !== undefined) {
+      parsedPredictions = rawOutput.predictions;
     }
   }
 
-  throw lastError;
+  if (!parsedPredictions || parsedPredictions.length === 0) {
+    throw new Error('No prediction returned from API');
+  }
+
+  const sortedPredictions = parsedPredictions.sort((a, b) => (b.score || b.confidence || 0) - (a.score || a.confidence || 0));
+  const topPrediction = sortedPredictions[0];
+  const diseaseName = formatLabel(topPrediction.label || "Unknown");
+  const score = topPrediction.score || topPrediction.confidence || 0;
+
+  return {
+    disease_name: diseaseName,
+    confidence: score,
+    status: decideDiseaseStatus(topPrediction.label, score),
+    description: "",
+    all_observations: sortedPredictions.map(p => ({
+      label: formatLabel(p.label),
+      likelihood: p.score || p.confidence || 0,
+    }))
+  };
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -119,7 +193,7 @@ export default function LeafDetectionScreen() {
 
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: 'images' as ImagePicker.MediaType,
       allowsEditing: true,
       quality: 0.8,
     });
@@ -148,7 +222,7 @@ export default function LeafDetectionScreen() {
     setDiseaseName('Processing…');
 
     try {
-      const result = await analyzeWithGemini(imageUri);
+      const result = await analyzeWithHuggingFace(imageUri);
       setDiseaseName(result.disease_name ?? 'Unknown');
       setConfidence(
         result.confidence != null

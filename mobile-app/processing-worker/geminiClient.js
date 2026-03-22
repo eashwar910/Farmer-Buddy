@@ -63,7 +63,7 @@ export async function summarizeKeyframes(keyframes, genAI) {
 
   console.log(`  🤖 Sending ${keyframes.length} keyframes to Gemini models...`);
 
-  const MODELS_TO_TRY = ['gemini-3.1-flash-lite', 'gemini-3', 'gemini-3.1-pro'];
+  const MODELS_TO_TRY = ['gemini-2.5-pro'];
   let lastError = null;
   let text = '';
 

@@ -88,6 +88,7 @@ export default function HomeScreen({ navigation }: any) {
 
   const handleLeafDetectionPress = () => navigation.navigate('LeafDetection');
   const handleIoTPress = () => navigation.navigate('IoTSensorScreen');
+  const handleAgronomistChatPress = () => navigation.navigate('AgronomistChat');
 
   const styles = getStyles(themeColors);
 
@@ -136,14 +137,23 @@ export default function HomeScreen({ navigation }: any) {
             </TouchableOpacity>
           </View>
 
-          {/* Bottom centered: IoT Sensor */}
-          <View style={styles.gridRowCentered}>
+          {/* Bottom centered: IoT Sensor + Agronomist Chat */}
+          <View style={styles.gridRow}>
             <TouchableOpacity onPress={handleIoTPress} disabled={updatingRole} activeOpacity={0.8}>
               <LinearGradient colors={['#1e40af', '#172554']} style={[styles.gridButton, { width: BUTTON_SIZE, height: BUTTON_SIZE }]}>
                 <View style={styles.gridIconCircle}>
                   <MaterialCommunityIcons name="signal-variant" size={30} color="#60a5fa" />
                 </View>
                 <Text style={styles.gridLabel}>{t('sensorAnalysis')}</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+
+            <TouchableOpacity onPress={handleAgronomistChatPress} disabled={updatingRole} activeOpacity={0.8}>
+              <LinearGradient colors={['#9333ea', '#4c1d95']} style={[styles.gridButton, { width: BUTTON_SIZE, height: BUTTON_SIZE }]}>
+                <View style={styles.gridIconCircle}>
+                  <MaterialCommunityIcons name="robot-outline" size={30} color="#c084fc" />
+                </View>
+                <Text style={styles.gridLabel}>{t('agronomistChat') || 'Agronomist Chat'}</Text>
               </LinearGradient>
             </TouchableOpacity>
           </View>

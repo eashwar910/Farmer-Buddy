@@ -10,6 +10,7 @@ import ShiftDetailsScreen from '../screens/ShiftDetailsScreen';
 import HomeScreen from '../screens/HomeScreen';
 import LeafDetectionScreen from '../screens/LeafDetectionScreen';
 import IoTSensorScreen from '../screens/IoTSensorScreen';
+import AgronomistChatScreen from '../screens/AgronomistChatScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import { RootStackParamList } from './types';
 
@@ -63,6 +64,11 @@ export default function RootNavigator() {
             name="IoTSensorScreen" 
             component={IoTSensorScreen}
             options={{ headerShown: true, title: 'Farm Sensor Analysis' }}
+          />
+          <Stack.Screen 
+            name="AgronomistChat" 
+            component={AgronomistChatScreen}
+            options={{ headerShown: false }}
           />
           <Stack.Screen 
             name="SettingsScreen" 
