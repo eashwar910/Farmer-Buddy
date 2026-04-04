@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(grep -r \"CFBundleDisplayName\\\\|PRODUCT_NAME\" /Users/eashwarsiddha/Documents/UoNM/Year2/Sem2/SEGP_2/mobile-app/ios/*.xcconfig)",
-      "Bash(supabase functions:*)"
+      "Bash(supabase functions:*)",
+      "Bash(npm run:*)",
+      "Bash(npm install:*)"
     ]
   }
 }
