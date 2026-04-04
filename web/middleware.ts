@@ -1,78 +1,50 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { createServerClient, type CookieMethodsServer } from '@supabase/ssr';
 
-// Run on Node.js runtime instead of Edge to avoid fetch/crypto
-// compatibility issues with @supabase/ssr on Vercel's edge network.
-export const runtime = 'nodejs';
+// Middleware runs on the Edge Runtime. We do NOT import @supabase/ssr here
+// because its transitive dependencies reference __dirname (a Node.js global
+// unavailable on the Edge Runtime). Instead we do a lightweight cookie check:
+// Supabase writes a cookie named sb-<project-ref>-auth-token (or chunked as
+// sb-<ref>-auth-token.0) when the user is signed in. If that cookie is present
+// with a non-empty value, we treat the user as authenticated and let the
+// individual pages do the authoritative getUser() verification.
 
 export async function middleware(request: NextRequest) {
   try {
-    let supabaseResponse = NextResponse.next({ request });
-
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return request.cookies.getAll();
-          },
-          setAll(cookiesToSet) {
-            cookiesToSet.forEach(({ name, value }) =>
-              request.cookies.set(name, value),
-            );
-            supabaseResponse = NextResponse.next({ request });
-            cookiesToSet.forEach(({ name, value, options }) =>
-              supabaseResponse.cookies.set(name, value, options),
-            );
-          },
-        } satisfies CookieMethodsServer,
-      },
-    );
-
     const pathname = request.nextUrl.pathname;
 
     // Allow API routes through without auth check
     if (pathname.startsWith('/api/')) {
-      return supabaseResponse;
+      return NextResponse.next({ request });
     }
 
-    // Use getSession() instead of getUser() for middleware.
-    // getUser() makes a live round-trip to Supabase's auth server on every
-    // request, which can timeout or fail in Edge/Node runtime and cause
-    // MIDDLEWARE_INVOCATION_FAILED. getSession() reads and verifies the JWT
-    // from the cookie locally — no outbound network call.
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-
-    const isAuthenticated = !!session?.user;
+    // Check for any Supabase auth session cookie.
+    // Matches: sb-<ref>-auth-token  and  sb-<ref>-auth-token.0 (chunked).
+    const isAuthenticated = request.cookies.getAll().some(
+      ({ name, value }) => /^sb-.+-auth-token/.test(name) && value.length > 0,
+    );
 
     // Unauthenticated users can only access the login page (/)
-    // No redirect loop: hitting / while unauthenticated falls through to supabaseResponse
     if (!isAuthenticated && pathname !== '/') {
       return NextResponse.redirect(new URL('/', request.url));
     }
 
-    // Authenticated users visiting the login page get sent to dashboard
-    // Pages handle role-specific routing (manager→/dashboard, employee→/employee)
+    // Authenticated users visiting the login page get sent to /dashboard;
+    // the dashboard page then redirects employees to /employee.
     if (isAuthenticated && pathname === '/') {
       return NextResponse.redirect(new URL('/dashboard', request.url));
     }
 
-    return supabaseResponse;
+    return NextResponse.next({ request });
   } catch {
-    // Never let middleware throw a 500 — just pass the request through
+    // Never let middleware throw — just pass the request through
     return NextResponse.next();
   }
 }
 
 export const config = {
   matcher: [
-    // Exclude ALL _next/ paths (static, image, data, chunks, server) to
-    // prevent recursive middleware invocation on Next.js internal routes.
-    // Previously only _next/static and _next/image were excluded, which
-    // allowed _next/data/ and _next/chunks/ to trigger middleware.
+    // Exclude ALL _next/ paths to prevent recursive middleware invocations
+    // on Next.js internal routes (_next/data/, _next/chunks/, etc.).
     '/((?!_next/|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 };
