@@ -24,9 +24,10 @@ import { supabase } from '../services/supabase';
 interface EmployeeStreamingProps {
   shiftId: string;
   employeeName: string;
+  onEgressStarted?: () => void;
 }
 
-export default function EmployeeStreaming({ shiftId, employeeName }: EmployeeStreamingProps) {
+export default function EmployeeStreaming({ shiftId, employeeName, onEgressStarted }: EmployeeStreamingProps) {
   const [token, setToken] = useState<string | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
@@ -150,7 +151,10 @@ export default function EmployeeStreaming({ shiftId, employeeName }: EmployeeStr
           shiftId={shiftId}
           onStop={handleStopStreaming}
           egressId={egressId}
-          onEgressStarted={setEgressId}
+          onEgressStarted={(id) => {
+            setEgressId(id);
+            onEgressStarted?.();
+          }}
         />
       </LiveKitRoom>
     </View>

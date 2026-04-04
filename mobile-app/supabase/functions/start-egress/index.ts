@@ -161,17 +161,17 @@ serve(async (req)=>{
     console.log('S3 endpoint (normalized):', normalizedEndpoint, 'bucket:', s3Bucket, 'region:', s3Region);
 
     // ── 8. Start egress via LiveKit REST API ─────────────────────────────────
-    // NOTE: In protobuf3 JSON encoding, oneof fields are flattened directly into
-    // the parent object — there is NO "output" wrapper around the s3 config.
+    // Use StartParticipantEgress so each employee can record independently
+    // in the same room. StartRoomCompositeEgress only allows one active
+    // egress per room, which blocks concurrent multi-employee shifts.
     const egressPayload = {
       room_name: roomName,
-      layout: 'grid',
+      identity:  participantId,
       segment_outputs: [
         {
           filename_prefix: filenamePrefix,
           playlist_name:   playlistName,
           live_playlist_name: '',
-          // 60 s per segment for development; set to 900 for 15-minute production chunks
           segment_duration: 10,
           protocol: 0,
           s3: {
@@ -185,9 +185,9 @@ serve(async (req)=>{
         },
       ],
     };
-    console.log('Starting egress for room:', roomName, 'participant:', participantId);
+    console.log('Starting participant egress for room:', roomName, 'participant:', participantId);
     console.log('Egress payload:', JSON.stringify(egressPayload));
-    const egressRes = await fetch(`${livekitApiUrl}/twirp/livekit.Egress/StartRoomCompositeEgress`, {
+    const egressRes = await fetch(`${livekitApiUrl}/twirp/livekit.Egress/StartParticipantEgress`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${adminJwt}`,

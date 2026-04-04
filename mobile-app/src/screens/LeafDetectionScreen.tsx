@@ -1,8 +1,7 @@
 /**
  * src/screens/LeafDetectionScreen.tsx
  * ────────────────────────────────────
- * Leaf disease detection powered by Gemini Vision API.
- * Replaces the unreliable HuggingFace Gradio space which goes to sleep.
+ * Leaf disease detection powered by Hugging Face Spaces.
  */
 
 import React, { useState } from 'react';
@@ -218,7 +217,7 @@ export default function LeafDetectionScreen() {
       return;
     }
     setIsProcessing(true);
-    setStatusMessage('Analysing with Gemini Vision AI…');
+    setStatusMessage('Analysing with Hugging Face Spaces...');
     setDiseaseName('Processing…');
 
     try {
@@ -335,7 +334,7 @@ export default function LeafDetectionScreen() {
             </View>
           )}
 
-          <Text style={styles.poweredBy}>⚡ Powered by Gemini Vision AI</Text>
+          <Text style={styles.poweredBy}>⚡ Powered by Hugging Face Spaces</Text>
         </View>
 
       </ScrollView>

@@ -7,6 +7,10 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Number of 10-second HLS segments that form one ~1-minute chunk.
+// Adjust if segment duration changes (e.g. set to 6 for 10 s segments → 60 s chunks).
+const SEGMENTS_PER_CHUNK = 6;
+
 const ANALYSIS_PROMPT = `You are an AI assistant analyzing security camera footage from an employee body camera.
 
 You will receive one or more video segments from a workplace recording session. Analyze the video content carefully and provide a detailed, professional summary.
@@ -49,11 +53,13 @@ serve(async (req) => {
       });
     }
 
-    // ── 2. Parse body ────────────────────────────────────────────────────────
+    // ── 2. Parse body — two modes: recordingId (session) or chunkId (single chunk) ──
     const body = await req.json();
     const recordingId: string | undefined = body.recordingId ?? body.recording_id;
-    if (!recordingId) {
-      return new Response(JSON.stringify({ error: 'recordingId is required' }), {
+    const chunkId: string | undefined     = body.chunkId ?? body.chunk_id;
+
+    if (!recordingId && !chunkId) {
+      return new Response(JSON.stringify({ error: 'recordingId or chunkId is required' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -64,82 +70,21 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // ── 4. Fetch recording row ───────────────────────────────────────────────
-    const { data: recording, error: fetchError } = await supabase
-      .from('recordings')
-      .select('id, shift_id, employee_id, storage_url, status, processing_status')
-      .eq('id', recordingId)
-      .single();
-
-    if (fetchError || !recording) {
-      return new Response(JSON.stringify({ error: 'Recording not found' }), {
-        status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    console.log('Processing recording:', recordingId, 'storage_url:', recording.storage_url);
-
-    // ── 5. Mark as processing ────────────────────────────────────────────────
-    await supabase.from('recordings').update({
-      processing_status: 'processing',
-      processing_attempts: 1,
-    }).eq('id', recordingId);
-
     const geminiKey = Deno.env.get('GEMINI_API_KEY');
     if (!geminiKey) {
-      await failRecording(supabase, recordingId, 'GEMINI_API_KEY not configured');
+      if (recordingId) await failRecording(supabase, recordingId, 'GEMINI_API_KEY not configured');
+      if (chunkId)     await failChunk(supabase, chunkId, 'GEMINI_API_KEY not configured');
       return new Response(JSON.stringify({ error: 'Gemini not configured' }), {
         status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // ── 6. Fetch employee info ───────────────────────────────────────────────
-    const { data: employeeData } = await supabase
-      .from('users').select('name').eq('id', recording.employee_id).single();
-    const employeeName = (employeeData as any)?.name ?? 'Unknown Employee';
-
-    // ── 7. Try to get real video analysis from DO Spaces ─────────────────────
-    let summary: string | null = null;
-
-    const recordingFull = recording as any;
-    try {
-      summary = await analyzeVideoFromStorage(
-        recordingFull.storage_url,
-        recordingFull.shift_id,
-        recordingFull.employee_id,
-        employeeName,
-        geminiKey
-      );
-    } catch (videoErr) {
-      console.error('Video analysis failed, falling back to metadata summary:', videoErr);
+    // ── Route to the correct handler ─────────────────────────────────────────
+    if (chunkId) {
+      return await processChunk(supabase, chunkId, geminiKey);
+    } else {
+      return await processRecording(supabase, recordingId!, geminiKey);
     }
-
-    // ── 8. Fallback: metadata-based summary with Gemini ──────────────────────
-    if (!summary) {
-      summary = await generateMetadataSummary(recording, employeeName, geminiKey);
-    }
-
-    // ── 9. Save summary ──────────────────────────────────────────────────────
-    const { error: updateError } = await supabase
-      .from('recordings')
-      .update({
-        summary,
-        processing_status: 'completed',
-        processed_at: new Date().toISOString(),
-      })
-      .eq('id', recordingId);
-
-    if (updateError) {
-      console.error('Failed to save summary:', updateError);
-      return new Response(JSON.stringify({ error: 'Failed to save summary' }), {
-        status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    console.log('✅ Recording processed successfully:', recordingId);
-    return new Response(JSON.stringify({ success: true, recordingId, summaryLength: summary.length }), {
-      status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
 
   } catch (err) {
     console.error('process-recording error:', err);
@@ -149,162 +94,307 @@ serve(async (req) => {
   }
 });
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// MODE A: Manual re-trigger for a full recording session
+//   - Creates/repairs recording_chunk rows from the HLS playlist
+//   - Fires per-chunk process-recording calls (fire-and-forget)
+//   - Does NOT do any Gemini work inline (would time out)
+//   - Normal path: livekit-webhook already does this on egress_ended.
+//     This mode is for back-filling recordings that completed before the
+//     chunk pipeline was deployed.
+// ─────────────────────────────────────────────────────────────────────────────
+async function processRecording(supabase: any, recordingId: string, geminiKey: string): Promise<Response> {
+  const { data: recording, error: fetchError } = await supabase
+    .from('recordings')
+    .select('id, shift_id, employee_id, started_at, status')
+    .eq('id', recordingId)
+    .single();
 
-async function failRecording(supabase: any, id: string, msg: string) {
-  await supabase.from('recordings').update({
-    processing_status: 'failed', processing_error: msg,
-  }).eq('id', id);
+  if (fetchError || !recording) {
+    return new Response(JSON.stringify({ error: 'Recording not found' }), {
+      status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  if (recording.status !== 'completed') {
+    return new Response(JSON.stringify({ error: 'Recording is not yet completed' }), {
+      status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  console.log('Re-triggering chunk pipeline for recording:', recordingId);
+
+  const { aws, baseSpacesUrl } = buildS3Client();
+  const playlistUrl = `${baseSpacesUrl}/${recording.shift_id}/${recording.employee_id}/playlist.m3u8`;
+  const segBase     = playlistUrl.replace(/playlist\.m3u8$/, '');
+
+  let segmentPaths: string[] = [];
+  try {
+    const res = await aws.fetch(playlistUrl);
+    if (res.ok) {
+      const text = await res.text();
+      segmentPaths = text.split('\n').filter(l => l.trim().endsWith('.ts') && !l.startsWith('#'));
+    }
+  } catch (err) {
+    console.warn('Playlist fetch error:', err);
+  }
+
+  const sessionStartMs  = new Date(recording.started_at).getTime();
+  const chunkDurationMs = SEGMENTS_PER_CHUNK * 10 * 1000;
+  const totalChunks     = segmentPaths.length > 0
+    ? Math.max(1, Math.ceil(segmentPaths.length / SEGMENTS_PER_CHUNK))
+    : 1;
+
+  const supabaseUrl    = Deno.env.get('SUPABASE_URL') ?? '';
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+  const createdChunkIds: string[] = [];
+
+  for (let idx = 0; idx < totalChunks; idx++) {
+    const firstSeg = segmentPaths[idx * SEGMENTS_PER_CHUNK];
+    const chunkUrl = firstSeg ? (firstSeg.startsWith('http') ? firstSeg : segBase + firstSeg) : null;
+
+    const { data: chunkRow, error: chunkErr } = await supabase
+      .from('recording_chunks')
+      .upsert({
+        recording_id:      recordingId,
+        chunk_index:       idx,
+        storage_url:       chunkUrl,
+        started_at:        new Date(sessionStartMs + idx * chunkDurationMs).toISOString(),
+        ended_at:          new Date(sessionStartMs + (idx + 1) * chunkDurationMs).toISOString(),
+        processing_status: 'pending',
+      }, { onConflict: 'recording_id,chunk_index' })
+      .select('id')
+      .single();
+
+    if (chunkErr) { console.error(`Failed to upsert chunk ${idx}:`, chunkErr); }
+    else if (chunkRow?.id) { createdChunkIds.push(chunkRow.id); }
+  }
+
+  await supabase.from('recordings').update({ processing_status: 'processing' }).eq('id', recordingId);
+
+  for (const cid of createdChunkIds) {
+    fetch(`${supabaseUrl}/functions/v1/process-recording`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${serviceRoleKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chunkId: cid }),
+    }).catch(err => console.warn(`Chunk ${cid} dispatch failed:`, err));
+  }
+
+  console.log(`✅ Re-triggered ${createdChunkIds.length} chunks for recording ${recordingId}`);
+  return new Response(JSON.stringify({ success: true, recordingId, chunksCreated: createdChunkIds.length }), {
+    status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
 }
 
-/**
- * Download video segment(s) from DO Spaces using AWS Sig V4,
- * upload to Gemini Files API, then analyze with generateContent.
- *
- * The playlist path is ALWAYS: {shiftId}/{employeeId}/playlist.m3u8
- * We reconstruct this from the recording row rather than relying on
- * storage_url (which LiveKit often omits in segmentResults).
- */
-async function analyzeVideoFromStorage(
-  storageUrl: string | null | undefined,
-  shiftId: string,
-  employeeId: string,
+// ─────────────────────────────────────────────────────────────────────────────
+// MODE B: Process a single recording_chunks row
+//   - Downloads its segment slice from DO Spaces
+//   - Runs Gemini analysis
+//   - Saves summary back to recording_chunks
+// ─────────────────────────────────────────────────────────────────────────────
+async function processChunk(supabase: any, chunkId: string, geminiKey: string): Promise<Response> {
+  // Fetch chunk row
+  const { data: chunk, error: chunkErr } = await supabase
+    .from('recording_chunks')
+    .select('id, recording_id, chunk_index, processing_status')
+    .eq('id', chunkId)
+    .single();
+
+  if (chunkErr || !chunk) {
+    return new Response(JSON.stringify({ error: 'Chunk not found' }), {
+      status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  // Fetch parent recording for shift_id / employee_id
+  const { data: recording, error: recErr } = await supabase
+    .from('recordings')
+    .select('id, shift_id, employee_id, started_at')
+    .eq('id', chunk.recording_id)
+    .single();
+
+  if (recErr || !recording) {
+    await failChunk(supabase, chunkId, 'Parent recording not found');
+    return new Response(JSON.stringify({ error: 'Parent recording not found' }), {
+      status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  console.log(`Processing chunk ${chunk.chunk_index} (${chunkId}) for recording ${chunk.recording_id}`);
+
+  // Mark chunk as processing
+  await supabase.from('recording_chunks').update({ processing_status: 'processing' }).eq('id', chunkId);
+
+  // Fetch employee name
+  const { data: employeeData } = await supabase
+    .from('users').select('name').eq('id', recording.employee_id).single();
+  const employeeName = (employeeData as any)?.name ?? 'Unknown Employee';
+
+  // Build playlist URL and fetch segment slice for this chunk
+  const { aws, baseSpacesUrl } = buildS3Client();
+  const playlistUrl = `${baseSpacesUrl}/${recording.shift_id}/${recording.employee_id}/playlist.m3u8`;
+  const baseUrl     = playlistUrl.replace(/playlist\.m3u8$/, '');
+
+  let summary: string | null = null;
+  let analysisError: string | null = null;
+  try {
+    const playlistRes = await aws.fetch(playlistUrl);
+    if (!playlistRes.ok) throw new Error(`Playlist fetch failed: ${playlistRes.status}`);
+    const playlistText = await playlistRes.text();
+    const allSegments = playlistText
+      .split('\n')
+      .filter(line => line.trim().endsWith('.ts') && !line.startsWith('#'));
+
+    console.log(`Playlist has ${allSegments.length} total segments; chunk_index=${chunk.chunk_index} takes [${chunk.chunk_index * SEGMENTS_PER_CHUNK}, ${chunk.chunk_index * SEGMENTS_PER_CHUNK + SEGMENTS_PER_CHUNK})`);
+
+    const segStart = chunk.chunk_index * SEGMENTS_PER_CHUNK;
+    const segSlice = allSegments.slice(segStart, segStart + SEGMENTS_PER_CHUNK);
+
+    if (segSlice.length === 0) throw new Error(`No segments for chunk_index ${chunk.chunk_index} (playlist has ${allSegments.length} segments)`);
+
+    summary = await analyzeSegments(segSlice, baseUrl, aws, employeeName, geminiKey);
+  } catch (err: any) {
+    analysisError = String(err?.message ?? err);
+    console.error(`Chunk ${chunkId} video analysis failed:`, analysisError);
+  }
+
+  if (!summary) {
+    // Minimal metadata fallback so the chunk doesn't stay stuck in processing
+    summary = JSON.stringify({
+      executive_summary: `Chunk ${chunk.chunk_index + 1} recording for ${employeeName}.`,
+      timeline: [],
+      notable_events: [],
+      safety_compliance: { concerns: [], positive_observations: [] },
+      overall_assessment: 'Video analysis unavailable for this chunk.',
+      note: analysisError
+        ? `Analysis failed: ${analysisError}`
+        : 'Video frame analysis was unavailable — this is a metadata-based summary only.',
+    });
+  }
+
+  const { error: updateErr } = await supabase
+    .from('recording_chunks')
+    .update({
+      summary,
+      processing_status: 'completed',
+      processed_at: new Date().toISOString(),
+    })
+    .eq('id', chunkId);
+
+  if (updateErr) {
+    console.error('Failed to save chunk summary:', updateErr);
+    await failChunk(supabase, chunkId, updateErr.message);
+    return new Response(JSON.stringify({ error: 'Failed to save chunk summary' }), {
+      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  console.log(`✅ Chunk processed: ${chunkId} (index ${chunk.chunk_index})`);
+
+  // ── Check if all sibling chunks are done; if so, mark parent recording completed ──
+  try {
+    const { data: siblings } = await supabase
+      .from('recording_chunks')
+      .select('processing_status')
+      .eq('recording_id', chunk.recording_id);
+
+    const allDone = siblings?.every(
+      (s: any) => s.processing_status === 'completed' || s.processing_status === 'failed'
+    );
+
+    if (allDone) {
+      // Use the first completed chunk's summary as the session-level summary
+      const { data: firstChunk } = await supabase
+        .from('recording_chunks')
+        .select('summary')
+        .eq('recording_id', chunk.recording_id)
+        .eq('chunk_index', 0)
+        .single();
+
+      await supabase
+        .from('recordings')
+        .update({
+          processing_status: 'completed',
+          processed_at: new Date().toISOString(),
+          summary: firstChunk?.summary ?? null,
+        })
+        .eq('id', chunk.recording_id);
+
+      console.log(`All chunks done — recording ${chunk.recording_id} marked completed`);
+    }
+  } catch (rollupErr) {
+    // Non-critical — the chunk summary is saved; parent status will just stay 'processing'
+    console.warn('Parent recording rollup failed (non-critical):', rollupErr);
+  }
+
+  return new Response(JSON.stringify({ success: true, chunkId }), {
+    status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Shared helper: download segment slice → upload to Gemini → analyze
+// ─────────────────────────────────────────────────────────────────────────────
+async function analyzeSegments(
+  segmentPaths: string[],
+  baseUrl: string,
+  aws: AwsClient,
   employeeName: string,
   geminiKey: string
 ): Promise<string> {
-  const s3Key    = Deno.env.get('DO_SPACES_KEY')    ?? '';
-  const s3Secret = Deno.env.get('DO_SPACES_SECRET') ?? '';
-  const s3Region = Deno.env.get('S3_REGION')        ?? 'sgp1';
-  const activeRegion = s3Region === 'ap-southeast-1' ? 'sgp1' : s3Region;
-  const s3Bucket = Deno.env.get('DO_SPACES_BUCKET') ?? '';
-
-  // ── Reconstruct the playlist URL from known start-egress path convention:
-  // {shiftId}/{employeeId}/playlist.m3u8
-  // This is more reliable than parsing storage_url (which LiveKit often omits)
-  const baseSpacesUrl = `https://${activeRegion}.digitaloceanspaces.com/${s3Bucket}`;
-  let normalizedUrl: string;
-
-  if (shiftId && employeeId) {
-    normalizedUrl = `${baseSpacesUrl}/${shiftId}/${employeeId}/playlist.m3u8`;
-    console.log('Using reconstructed playlist URL:', normalizedUrl);
-  } else if (storageUrl) {
-    // Fallback: try to normalize whatever storage_url we have
-    const urlObj = new URL(storageUrl);
-    let rawPath = urlObj.pathname;
-    if (rawPath.startsWith(`/${s3Bucket}/${s3Bucket}/`)) {
-      rawPath = rawPath.replace(`/${s3Bucket}/${s3Bucket}/`, `/${s3Bucket}/`);
-    } else if (!rawPath.startsWith(`/${s3Bucket}/`)) {
-      rawPath = `/${s3Bucket}${rawPath}`;
-    }
-    normalizedUrl = `https://${activeRegion}.digitaloceanspaces.com${rawPath}`;
-    if (!normalizedUrl.includes('playlist.m3u8')) {
-      normalizedUrl = normalizedUrl.replace(/\/?$/, '/playlist.m3u8');
-    }
-    console.log('Using normalized storage_url fallback:', normalizedUrl);
-  } else {
-    throw new Error('No valid URL: both shiftId/employeeId and storage_url are missing');
-  }
-
-  const aws = new AwsClient({
-    accessKeyId: s3Key,
-    secretAccessKey: s3Secret,
-    region: 'us-east-1', // Required by aws4fetch signature format but overridden by the actual URL
-    service: 's3',
-  });
-
-  const playlistRes = await aws.fetch(normalizedUrl);
-  if (!playlistRes.ok) {
-    const errText = await playlistRes.text();
-    throw new Error(`Failed to fetch playlist: ${playlistRes.status} - ${errText}`);
-  }
-
-  const playlistText = await playlistRes.text();
-  console.log('Playlist fetched, lines:', playlistText.split('\n').length);
-
-  const segmentPaths = playlistText
-    .split('\n')
-    .filter(line => line.trim().endsWith('.ts') && !line.startsWith('#'));
-
-  if (segmentPaths.length === 0) {
-    throw new Error('No .ts segments found in playlist');
-  }
-
-  const baseUrl = normalizedUrl.replace(/playlist\.m3u8$/, '');
-
-  // Fetch up to 6 segments and concatenate them — gives Gemini at least
-  // ~60 s of footage regardless of individual segment duration (10s, 30s, 60s etc.)
-  const segmentsToFetch = segmentPaths.slice(0, 6);
-  console.log(`Fetching ${segmentsToFetch.length} of ${segmentPaths.length} segments for Gemini upload`);
+  if (segmentPaths.length === 0) throw new Error('No segments provided');
 
   const segmentBuffers: Uint8Array[] = [];
-  for (const segPath of segmentsToFetch) {
+  for (const segPath of segmentPaths) {
     const segmentUrl = segPath.startsWith('http') ? segPath : baseUrl + segPath;
-    console.log('Fetching segment:', segmentUrl);
-    const segmentRes = await aws.fetch(segmentUrl);
-    if (!segmentRes.ok) {
-      const errText = await segmentRes.text();
-      console.warn(`Skipping segment (${segmentRes.status}): ${errText.slice(0, 100)}`);
+    const res = await aws.fetch(segmentUrl);
+    if (!res.ok) {
+      console.warn(`Skipping segment (${res.status}): ${segmentUrl}`);
       continue;
     }
-    segmentBuffers.push(new Uint8Array(await segmentRes.arrayBuffer()));
+    segmentBuffers.push(new Uint8Array(await res.arrayBuffer()));
   }
 
-  if (segmentBuffers.length === 0) {
-    throw new Error('All segment fetches failed');
-  }
+  if (segmentBuffers.length === 0) throw new Error('All segment fetches failed');
 
-  // Concatenate all fetched segment buffers into one continuous TS stream
   const totalBytes = segmentBuffers.reduce((acc, b) => acc + b.byteLength, 0);
   const segmentBytes = new Uint8Array(totalBytes);
   let offset = 0;
-  for (const buf of segmentBuffers) {
-    segmentBytes.set(buf, offset);
-    offset += buf.byteLength;
-  }
-  console.log(`Concatenated ${segmentBuffers.length} segments: ${segmentBytes.byteLength} bytes total`);
+  for (const buf of segmentBuffers) { segmentBytes.set(buf, offset); offset += buf.byteLength; }
 
-  // Upload to Gemini Files API
+  console.log(`Concatenated ${segmentBuffers.length} segments: ${segmentBytes.byteLength} bytes`);
+
   const fileInfo = await uploadToGeminiFiles(segmentBytes, geminiKey);
-  console.log(`Uploaded to Gemini Files: ${fileInfo.uri} (${fileInfo.name})`);
+  console.log(`Uploaded to Gemini Files: ${fileInfo.uri}`);
 
-  // Wait for the video file to become ACTIVE (Gemini needs time to process MP4/TS files)
+  // Wait for Gemini to mark the file ACTIVE
   let isActive = false;
-  let attempts = 0;
-  while (!isActive && attempts < 10) {
-    await new Promise(r => setTimeout(r, 2000)); // wait 2s
-    attempts++;
-    
-    const checkRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/${fileInfo.name}?key=${geminiKey}`);
+  for (let attempt = 0; attempt < 10 && !isActive; attempt++) {
+    await new Promise(r => setTimeout(r, 2000));
+    const checkRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/${fileInfo.name}?key=${geminiKey}`
+    );
     if (checkRes.ok) {
       const fileStatus = await checkRes.json();
-      console.log(`File state [attempt ${attempts}]: ${fileStatus.state}`);
-      if (fileStatus.state === 'ACTIVE') {
-        isActive = true;
-      } else if (fileStatus.state === 'FAILED') {
-        throw new Error(`Gemini failed to process the uploaded video file: ${fileInfo.name}`);
-      }
+      console.log(`File state [attempt ${attempt + 1}]: ${fileStatus.state}`);
+      if (fileStatus.state === 'ACTIVE') { isActive = true; }
+      else if (fileStatus.state === 'FAILED') throw new Error(`Gemini file processing failed: ${fileInfo.name}`);
     }
   }
+  if (!isActive) throw new Error(`Gemini file ${fileInfo.name} did not become ACTIVE in time`);
 
-  if (!isActive) {
-    throw new Error(`Gemini file ${fileInfo.name} did not become ACTIVE in time.`);
-  }
-
-  // Analyze with Gemini
   const geminiRes = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              { text: `Employee name: ${employeeName}\n\n${ANALYSIS_PROMPT}` },
-              { file_data: { mime_type: 'video/MP2T', file_uri: fileInfo.uri } },
-            ],
-          },
-        ],
+        contents: [{
+          parts: [
+            { text: `Employee name: ${employeeName}\n\n${ANALYSIS_PROMPT}` },
+            { file_data: { mime_type: 'video/mp2t', file_uri: fileInfo.uri } },
+          ],
+        }],
         generationConfig: { temperature: 0.3, maxOutputTokens: 2048 },
       }),
     }
@@ -320,11 +410,28 @@ async function analyzeVideoFromStorage(
   return extractJson(rawText);
 }
 
-/**
- * Upload binary data to Gemini Files API and return uri and name.
- */
-async function uploadToGeminiFiles(data: Uint8Array, geminiKey: string): Promise<{uri: string, name: string}> {
-  // Step 1: initiate resumable upload
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+function buildS3Client(): { aws: AwsClient; baseSpacesUrl: string; s3Bucket: string; activeRegion: string } {
+  const s3Key      = Deno.env.get('DO_SPACES_KEY')    ?? '';
+  const s3Secret   = Deno.env.get('DO_SPACES_SECRET') ?? '';
+  const s3Region   = Deno.env.get('S3_REGION')        ?? 'sgp1';
+  const s3Bucket   = Deno.env.get('DO_SPACES_BUCKET') ?? '';
+  const activeRegion = s3Region === 'ap-southeast-1' ? 'sgp1' : s3Region;
+
+  const aws = new AwsClient({
+    accessKeyId: s3Key,
+    secretAccessKey: s3Secret,
+    region: 'us-east-1',
+    service: 's3',
+  });
+
+  return { aws, baseSpacesUrl: `https://${activeRegion}.digitaloceanspaces.com/${s3Bucket}`, s3Bucket, activeRegion };
+}
+
+async function uploadToGeminiFiles(data: Uint8Array, geminiKey: string): Promise<{ uri: string; name: string }> {
   const startRes = await fetch(
     `https://generativelanguage.googleapis.com/upload/v1beta/files?uploadType=resumable&key=${geminiKey}`,
     {
@@ -334,23 +441,16 @@ async function uploadToGeminiFiles(data: Uint8Array, geminiKey: string): Promise
         'X-Goog-Upload-Protocol': 'resumable',
         'X-Goog-Upload-Command': 'start',
         'X-Goog-Upload-Header-Content-Length': String(data.byteLength),
-        'X-Goog-Upload-Header-Content-Type': 'video/MP2T',
+        'X-Goog-Upload-Header-Content-Type': 'video/mp2t',
       },
       body: JSON.stringify({ file: { display_name: 'recording-segment.ts' } }),
     }
   );
 
-  if (!startRes.ok) {
-    const err = await startRes.text();
-    throw new Error(`Failed to initiate Gemini upload: ${startRes.status} ${err}`);
-  }
-
+  if (!startRes.ok) throw new Error(`Gemini upload init failed: ${startRes.status} ${await startRes.text()}`);
   const uploadUrl = startRes.headers.get('X-Goog-Upload-URL');
-  if (!uploadUrl) {
-    throw new Error('No upload URL returned from Gemini Files API');
-  }
+  if (!uploadUrl) throw new Error('No upload URL from Gemini Files API');
 
-  // Step 2: upload the data
   const uploadRes = await fetch(uploadUrl, {
     method: 'POST',
     headers: {
@@ -361,22 +461,14 @@ async function uploadToGeminiFiles(data: Uint8Array, geminiKey: string): Promise
     body: data,
   });
 
-  if (!uploadRes.ok) {
-    const err = await uploadRes.text();
-    throw new Error(`Failed to upload to Gemini: ${uploadRes.status} ${err}`);
-  }
-
+  if (!uploadRes.ok) throw new Error(`Gemini upload failed: ${uploadRes.status} ${await uploadRes.text()}`);
   const fileData = await uploadRes.json();
   const uri = fileData?.file?.uri;
   const name = fileData?.file?.name;
   if (!uri || !name) throw new Error('No file URI or name in Gemini upload response');
-  
   return { uri, name };
 }
 
-/**
- * Metadata-based fallback summary when video access fails.
- */
 async function generateMetadataSummary(recording: any, employeeName: string, geminiKey: string): Promise<string> {
   const contextPrompt = `You are an AI assistant reviewing a workplace body camera recording.
 
@@ -413,6 +505,18 @@ Respond with valid JSON matching this exact structure:
   const data = await geminiRes.json();
   const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '{}';
   return extractJson(raw);
+}
+
+async function failRecording(supabase: any, id: string, msg: string) {
+  await supabase.from('recordings').update({
+    processing_status: 'failed', processing_error: msg,
+  }).eq('id', id);
+}
+
+async function failChunk(supabase: any, id: string, msg: string) {
+  await supabase.from('recording_chunks').update({
+    processing_status: 'failed', processing_error: msg,
+  }).eq('id', id);
 }
 
 function extractJson(raw: string): string {

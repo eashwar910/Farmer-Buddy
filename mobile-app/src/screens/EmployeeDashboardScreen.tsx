@@ -9,6 +9,7 @@ import {
   Animated,
   ScrollView,
   SafeAreaView,
+  Linking,
 } from 'react-native';
 import { useAuth } from '../hooks/useAuth';
 import { useShift } from '../hooks/useShift';
@@ -31,7 +32,9 @@ export default function EmployeeDashboardScreen({ navigation }: any) {
 
   const [showShiftModal, setShowShiftModal] = useState(false);
   const [shiftEndedModal, setShiftEndedModal] = useState(false);
+  const [showStreamingBanner, setShowStreamingBanner] = useState(false);
   const prevShiftRef = useRef<string | null>(null);
+  const bannerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   // Detect shift start/end transitions for modals
@@ -67,6 +70,20 @@ export default function EmployeeDashboardScreen({ navigation }: any) {
       pulseAnim.setValue(1);
     }
   }, [activeShift, pulseAnim]);
+
+  // Show "View on a bigger screen" banner when streaming starts
+  const handleEgressStarted = () => {
+    setShowStreamingBanner(true);
+    if (bannerTimerRef.current) clearTimeout(bannerTimerRef.current);
+    bannerTimerRef.current = setTimeout(() => setShowStreamingBanner(false), 10000);
+  };
+
+  // Clear timer on unmount
+  useEffect(() => {
+    return () => {
+      if (bannerTimerRef.current) clearTimeout(bannerTimerRef.current);
+    };
+  }, []);
 
   const handleSignOut = () => {
     Alert.alert(t('Sign Out'), t('Are you sure you want to sign out?'), [
@@ -107,7 +124,30 @@ export default function EmployeeDashboardScreen({ navigation }: any) {
           <EmployeeStreaming
             shiftId={activeShift.id}
             employeeName={profile?.name || 'Employee'}
+            onEgressStarted={handleEgressStarted}
           />
+
+          {/* View on a bigger screen banner */}
+          {showStreamingBanner && (
+            <View style={styles.streamingBanner}>
+              <View style={styles.streamingBannerContent}>
+                <Text style={styles.streamingBannerText}>
+                  View on a bigger screen —{' '}
+                </Text>
+                <TouchableOpacity
+                  onPress={() => Linking.openURL('https://farmerbuddy.site/dashboard')}
+                >
+                  <Text style={styles.streamingBannerLink}>farmerbuddy.site/dashboard</Text>
+                </TouchableOpacity>
+              </View>
+              <TouchableOpacity
+                onPress={() => setShowStreamingBanner(false)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Text style={styles.streamingBannerClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
       ) : (
         <View style={styles.idleCard}>
@@ -341,6 +381,40 @@ const getStyles = (themeColors: any) => StyleSheet.create({
   modalButtonText: {
     color: '#fff',
     fontSize: 16,
+    fontWeight: '700',
+  },
+  // Streaming banner
+  streamingBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: themeColors.card,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: themeColors.accent,
+    padding: 12,
+    marginTop: 12,
+    justifyContent: 'space-between',
+  },
+  streamingBannerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    flex: 1,
+    marginRight: 8,
+  },
+  streamingBannerText: {
+    fontSize: 13,
+    color: themeColors.subtext,
+  },
+  streamingBannerLink: {
+    fontSize: 13,
+    color: themeColors.accent,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
+  },
+  streamingBannerClose: {
+    fontSize: 14,
+    color: themeColors.subtext,
     fontWeight: '700',
   },
 });

@@ -153,6 +153,13 @@ export default function RecordingSummaryModal({
                     <Text style={styles.sectionText}>{parsedSummary.overall_assessment}</Text>
                   </View>
                 )}
+
+                {/* Note / diagnostic message (shown when analysis failed) */}
+                {parsedSummary.note && (
+                  <View style={styles.noteSection}>
+                    <Text style={styles.noteText}>ℹ {parsedSummary.note}</Text>
+                  </View>
+                )}
               </View>
             ) : (
               // Raw text fallback
@@ -178,7 +185,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#1E293B',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    maxHeight: '90%',
+    height: '85%',
     borderTopWidth: 1,
     borderLeftWidth: 1,
     borderRightWidth: 1,
@@ -336,5 +343,18 @@ const styles = StyleSheet.create({
     color: '#CBD5E1',
     lineHeight: 22,
     fontFamily: 'monospace',
+  },
+  noteSection: {
+    backgroundColor: '#0F172A',
+    borderRadius: 8,
+    padding: 12,
+    borderLeftWidth: 3,
+    borderLeftColor: '#475569',
+  },
+  noteText: {
+    fontSize: 13,
+    color: '#64748B',
+    lineHeight: 18,
+    fontStyle: 'italic',
   },
 });

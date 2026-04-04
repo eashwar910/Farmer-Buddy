@@ -1,0 +1,45 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Sansation font via Google Fonts CDN */
+@import url('https://fonts.googleapis.com/css2?family=Sansation:ital,wght@0,300;0,400;0,700;1,300;1,400;1,700&display=swap');
+
+:root {
+  --bg: #0d1b2a;
+  --card: #1a2d3f;
+  --border: #2a3f52;
+  --text: #ffffff;
+  --subtext: #8fa8bb;
+  --accent: #4ade80;
+}
+
+html,
+body {
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: 'Sansation', system-ui, sans-serif;
+  min-height: 100vh;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--card);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--subtext);
+}
+
+/* LiveKit overrides — dark theme */
+.lk-grid-layout,
+.lk-focus-layout {
+  background: var(--bg) !important;
+}

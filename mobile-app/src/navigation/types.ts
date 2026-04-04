@@ -27,6 +27,7 @@ export type RootStackParamList = {
     shiftId: string;
     employeeId: string;
     employeeName: string;
+    recordingId?: string; // when set: show chunks for this recording session
   };
   ShiftDetails: {
     shiftId: string;

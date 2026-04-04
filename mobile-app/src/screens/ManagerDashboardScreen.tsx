@@ -9,6 +9,7 @@ import {
   ScrollView,
   SafeAreaView,
   RefreshControl,
+  Linking,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -352,6 +353,24 @@ export default function ManagerDashboardScreen() {
         </View>
       )}
 
+      {/* Web Dashboard Link */}
+      <View style={styles.section}>
+        <TouchableOpacity
+          style={styles.webDashboardCard}
+          onPress={() => Linking.openURL('https://farmerbuddy.site/dashboard')}
+          activeOpacity={0.75}
+        >
+          <View style={styles.webDashboardContent}>
+            <Text style={styles.webDashboardIcon}>🖥️</Text>
+            <View style={styles.webDashboardText}>
+              <Text style={styles.webDashboardTitle}>{t('Open Web Dashboard')}</Text>
+              <Text style={styles.webDashboardSubtitle}>farmerbuddy.site/dashboard</Text>
+            </View>
+          </View>
+          <Text style={styles.webDashboardArrow}>›</Text>
+        </TouchableOpacity>
+      </View>
+
       {/* Employee List */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>
@@ -636,5 +655,41 @@ const getStyles = (themeColors: any) => StyleSheet.create({
     marginTop: 8,
     textAlign: 'center',
     lineHeight: 20,
+  },
+  webDashboardCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: themeColors.card,
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: themeColors.accent,
+    marginBottom: 20,
+  },
+  webDashboardContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 12,
+  },
+  webDashboardIcon: {
+    fontSize: 22,
+  },
+  webDashboardText: {
+    flex: 1,
+  },
+  webDashboardTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: themeColors.accent,
+  },
+  webDashboardSubtitle: {
+    fontSize: 12,
+    color: themeColors.subtext,
+    marginTop: 2,
+  },
+  webDashboardArrow: {
+    fontSize: 22,
+    color: themeColors.accent,
   },
 });

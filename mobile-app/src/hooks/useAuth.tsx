@@ -55,6 +55,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(session?.user ?? null);
 
         if (session?.user) {
+          // Hold loading=true until profile (and therefore role) is resolved.
+          // Without this, a fresh sign-in sets session+user synchronously and
+          // re-renders the navigator with profile=null before the fetch returns.
+          setLoading(true);
           const p = await fetchProfile(session.user.id);
           setProfile(p);
         } else {
@@ -69,9 +73,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (user && !profile) {
+      // onAuthStateChange is the authority on loading state for the sign-in path.
+      // Calling setLoading(false) here would race against its async fetchProfile
+      // and could clear the loading gate before the role is known.
       fetchProfile(user.id).then((p) => {
         setProfile(p);
-        setLoading(false);
       });
     } else if (!user) {
       setLoading(false);

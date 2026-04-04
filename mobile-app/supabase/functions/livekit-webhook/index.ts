@@ -1,6 +1,10 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0';
 import { WebhookReceiver } from 'https://esm.sh/livekit-server-sdk@2.6.1';
+import { AwsClient } from 'https://esm.sh/aws4fetch@1.0.18';
+
+// Number of 10-second HLS segments per ~1-minute chunk
+const SEGMENTS_PER_CHUNK = 6;
 
 // No CORS needed — this is called by LiveKit server, not the app
 serve(async (req) => {
@@ -90,49 +94,134 @@ serve(async (req) => {
         storageUrl = `${normEndpoint}/${bucket}/${shiftId}`;
       }
 
-      const { data: updatedRow, error: updateError } = await supabase
+      // ── Fetch the recording row (need shift_id / employee_id for playlist URL) ──
+      const { data: recordingRow, error: fetchRecErr } = await supabase
+        .from('recordings')
+        .select('id, shift_id, employee_id, started_at')
+        .eq('egress_id', egressId)
+        .single();
+
+      if (fetchRecErr || !recordingRow) {
+        console.error('Could not fetch recording row for egress:', egressId, fetchRecErr);
+        return new Response('ok', { status: 200 });
+      }
+
+      // ── Update recording to completed / failed ────────────────────────────
+      const { error: updateError } = await supabase
         .from('recordings')
         .update({
           status,
           ended_at:    new Date().toISOString(),
           storage_url: storageUrl,
+          // Mark processing_status based on outcome
+          processing_status: failed ? 'failed' : 'pending',
         })
-        .eq('egress_id', egressId)
-        .select('id')
-        .single();
+        .eq('egress_id', egressId);
 
       if (updateError) {
         console.error('Failed to update recording row:', updateError);
-        // Return 200 anyway — don't cause LiveKit to retry in a loop
-      } else {
-        console.log(`Recording row updated: ${egressId} → ${status} | url: ${storageUrl}`);
+        return new Response('ok', { status: 200 });
+      }
 
-        // Auto-trigger AI summarization when a recording completes
-        if (status === 'completed' && updatedRow?.id) {
-          try {
-            const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
-            const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
-            const processRes = await fetch(
-              `${supabaseUrl}/functions/v1/process-recording`,
-              {
-                method: 'POST',
-                headers: {
-                  'Authorization': `Bearer ${supabaseServiceKey}`,
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ recordingId: updatedRow.id }),
-              }
-            );
-            if (processRes.ok) {
-              console.log(`AI summarization triggered for recording ${updatedRow.id}`);
-            } else {
-              console.warn(`AI summarization trigger failed: ${processRes.status}`, await processRes.text());
-            }
-          } catch (processErr) {
-            // Non-critical — summarization can be retried from the app
-            console.warn('Failed to auto-trigger process-recording:', processErr);
+      console.log(`Recording row updated: ${egressId} → ${status}`);
+
+      // ── On success: create chunk rows then fire per-chunk Gemini jobs ─────
+      if (status === 'completed') {
+        const recordingId = recordingRow.id;
+
+        // Build playlist URL from known path convention
+        const s3Region  = Deno.env.get('S3_REGION') ?? 'sgp1';
+        const s3Bucket  = Deno.env.get('DO_SPACES_BUCKET') ?? '';
+        const region    = s3Region === 'ap-southeast-1' ? 'sgp1' : s3Region;
+        const baseUrl   = `https://${region}.digitaloceanspaces.com/${s3Bucket}`;
+        const playlistUrl = `${baseUrl}/${recordingRow.shift_id}/${recordingRow.employee_id}/playlist.m3u8`;
+
+        // Fetch and parse the HLS playlist
+        const aws = new AwsClient({
+          accessKeyId:     Deno.env.get('DO_SPACES_KEY') ?? '',
+          secretAccessKey: Deno.env.get('DO_SPACES_SECRET') ?? '',
+          region: 'us-east-1',
+          service: 's3',
+        });
+
+        let segmentPaths: string[] = [];
+        try {
+          const playlistRes = await aws.fetch(playlistUrl);
+          if (playlistRes.ok) {
+            const text = await playlistRes.text();
+            segmentPaths = text
+              .split('\n')
+              .filter(l => l.trim().endsWith('.ts') && !l.startsWith('#'));
+            console.log(`Playlist has ${segmentPaths.length} segments for recording ${recordingId}`);
+          } else {
+            console.warn(`Playlist fetch failed (${playlistRes.status}) — chunks will be created without segment mapping`);
+          }
+        } catch (playlistErr) {
+          console.warn('Playlist fetch error:', playlistErr);
+        }
+
+        const sessionStartMs  = new Date(recordingRow.started_at).getTime();
+        const chunkDurationMs = SEGMENTS_PER_CHUNK * 10 * 1000; // ~60 s per chunk
+        const segBase         = playlistUrl.replace(/playlist\.m3u8$/, '');
+
+        // If playlist unavailable fall back to time-based chunk count (5-min session → 5 chunks)
+        const totalChunks = segmentPaths.length > 0
+          ? Math.max(1, Math.ceil(segmentPaths.length / SEGMENTS_PER_CHUNK))
+          : 1;
+
+        const supabaseUrl    = Deno.env.get('SUPABASE_URL') ?? '';
+        const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+
+        const createdChunkIds: string[] = [];
+
+        for (let idx = 0; idx < totalChunks; idx++) {
+          const firstSeg   = segmentPaths[idx * SEGMENTS_PER_CHUNK];
+          const chunkUrl   = firstSeg
+            ? (firstSeg.startsWith('http') ? firstSeg : segBase + firstSeg)
+            : null;
+
+          const { data: chunkRow, error: chunkErr } = await supabase
+            .from('recording_chunks')
+            .upsert({
+              recording_id:      recordingId,
+              chunk_index:       idx,
+              storage_url:       chunkUrl,
+              started_at:        new Date(sessionStartMs + idx * chunkDurationMs).toISOString(),
+              ended_at:          new Date(sessionStartMs + (idx + 1) * chunkDurationMs).toISOString(),
+              processing_status: 'pending',
+            }, { onConflict: 'recording_id,chunk_index' })
+            .select('id')
+            .single();
+
+          if (chunkErr) {
+            console.error(`Failed to upsert chunk ${idx}:`, chunkErr);
+          } else if (chunkRow?.id) {
+            createdChunkIds.push(chunkRow.id);
           }
         }
+
+        console.log(`Created ${createdChunkIds.length} chunk rows for recording ${recordingId}`);
+
+        // Update parent recording so UI shows processing state
+        await supabase
+          .from('recordings')
+          .update({ processing_status: 'processing' })
+          .eq('id', recordingId);
+
+        // Fire one process-recording call per chunk (fire-and-forget)
+        // Each call is bounded to one chunk — no timeout risk
+        for (const cid of createdChunkIds) {
+          fetch(`${supabaseUrl}/functions/v1/process-recording`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${serviceRoleKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ chunkId: cid }),
+          }).catch(err => console.warn(`Chunk ${cid} fire-and-forget failed:`, err));
+        }
+
+        console.log(`Fired ${createdChunkIds.length} per-chunk Gemini jobs for recording ${recordingId}`);
       }
     }
 

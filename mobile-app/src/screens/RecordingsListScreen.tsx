@@ -32,13 +32,14 @@ interface RecordingsListScreenProps {
       shiftId: string;
       employeeId: string;
       employeeName: string;
+      recordingId?: string; // when set: show per-chunk rows from recording_chunks
     };
   };
   navigation: any;
 }
 
 export default function RecordingsListScreen({ route, navigation }: RecordingsListScreenProps) {
-  const { shiftId, employeeId, employeeName } = route.params;
+  const { shiftId, employeeId, employeeName, recordingId } = route.params;
   const [recordings, setRecordings] = useState<Recording[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedRecording, setSelectedRecording] = useState<Recording | null>(null);
@@ -48,40 +49,84 @@ export default function RecordingsListScreen({ route, navigation }: RecordingsLi
     navigation.setOptions({ title: `${employeeName} — Recordings` });
     fetchRecordings();
 
-    // Subscribe to realtime updates (new chunks coming in)
-    const channel = supabase
-      .channel(`recordings-${shiftId}-${employeeId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'recordings',
-          filter: `shift_id=eq.${shiftId}`,
-        },
-        () => {
-          fetchRecordings();
-        }
-      )
-      .subscribe();
+    // When showing per-chunk data for a specific recording session, subscribe to
+    // recording_chunks changes; otherwise subscribe to the recordings table.
+    const channel = recordingId
+      ? supabase
+          .channel(`chunks-${recordingId}`)
+          .on(
+            'postgres_changes',
+            {
+              event: '*',
+              schema: 'public',
+              table: 'recording_chunks',
+              filter: `recording_id=eq.${recordingId}`,
+            },
+            () => { fetchRecordings(); }
+          )
+          .subscribe()
+      : supabase
+          .channel(`recordings-${shiftId}-${employeeId}`)
+          .on(
+            'postgres_changes',
+            {
+              event: '*',
+              schema: 'public',
+              table: 'recordings',
+              filter: `shift_id=eq.${shiftId}`,
+            },
+            () => { fetchRecordings(); }
+          )
+          .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [shiftId, employeeId]);
+    return () => { supabase.removeChannel(channel); };
+  }, [shiftId, employeeId, recordingId]);
 
   const fetchRecordings = async () => {
-    const { data, error } = await supabase
-      .from('recordings')
-      .select('*')
-      .eq('shift_id', shiftId)
-      .eq('employee_id', employeeId)
-      .order('started_at', { ascending: true });
+    if (recordingId) {
+      // Fetch per-chunk rows and map them to the Recording interface
+      const { data, error } = await supabase
+        .from('recording_chunks')
+        .select('id, recording_id, chunk_index, storage_url, started_at, ended_at, summary, processing_status')
+        .eq('recording_id', recordingId)
+        .order('chunk_index', { ascending: true });
 
-    if (error) {
-      console.error('Failed to fetch recordings:', error);
+      if (error) {
+        console.error('Failed to fetch recording_chunks:', error);
+      } else {
+        // Map recording_chunks fields onto Recording shape
+        const mapped: Recording[] = (data ?? []).map((c: any) => ({
+          id:               c.id,
+          shift_id:         shiftId,
+          employee_id:      employeeId,
+          egress_id:        null,
+          chunk_index:      c.chunk_index,
+          storage_url:      c.storage_url ?? null,
+          // Derive a status: treat pending/processing with no end time as 'recording'
+          status:           (!c.ended_at && (c.processing_status === 'pending' || c.processing_status === 'processing'))
+                              ? 'recording'
+                              : 'completed',
+          started_at:       c.started_at,
+          ended_at:         c.ended_at ?? null,
+          summary:          c.summary ?? null,
+          processing_status: c.processing_status ?? null,
+        }));
+        setRecordings(mapped);
+      }
     } else {
-      setRecordings(data as Recording[]);
+      // Existing behavior: fetch session-level recordings for this employee
+      const { data, error } = await supabase
+        .from('recordings')
+        .select('*')
+        .eq('shift_id', shiftId)
+        .eq('employee_id', employeeId)
+        .order('started_at', { ascending: true });
+
+      if (error) {
+        console.error('Failed to fetch recordings:', error);
+      } else {
+        setRecordings(data as Recording[]);
+      }
     }
     setLoading(false);
   };

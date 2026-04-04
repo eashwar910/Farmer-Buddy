@@ -377,27 +377,41 @@ export default function ShiftDetailsScreen({ route, navigation }: ShiftDetailsSc
         </View>
 
         {rec.status === 'completed' && (
-          <TouchableOpacity
-            style={[
-              styles.summaryBtn,
-              summaryReady && styles.summaryBtnReady,
-              summaryProcessing && styles.summaryBtnProcessing,
-              !summaryReady && !summaryProcessing && styles.summaryBtnPending,
-            ]}
-            onPress={() => summaryReady ? handleViewSummary(rec, empName) : undefined}
-            disabled={!summaryReady}
-          >
-            {summaryProcessing ? (
-              <>
-                <ActivityIndicator size="small" color="#F59E0B" />
-                <Text style={styles.summaryBtnText}>⏳ AI Processing…</Text>
-              </>
-            ) : summaryReady ? (
-              <Text style={styles.summaryBtnText}>🤖 View AI Summary</Text>
-            ) : (
-              <Text style={[styles.summaryBtnText, { color: '#64748B' }]}>⏳ Pending…</Text>
-            )}
-          </TouchableOpacity>
+          <>
+            <TouchableOpacity
+              style={[
+                styles.summaryBtn,
+                summaryReady && styles.summaryBtnReady,
+                summaryProcessing && styles.summaryBtnProcessing,
+                !summaryReady && !summaryProcessing && styles.summaryBtnPending,
+              ]}
+              onPress={() => summaryReady ? handleViewSummary(rec, empName) : undefined}
+              disabled={!summaryReady}
+            >
+              {summaryProcessing ? (
+                <>
+                  <ActivityIndicator size="small" color="#F59E0B" />
+                  <Text style={styles.summaryBtnText}>⏳ AI Processing…</Text>
+                </>
+              ) : summaryReady ? (
+                <Text style={styles.summaryBtnText}>🤖 View AI Summary</Text>
+              ) : (
+                <Text style={[styles.summaryBtnText, { color: '#64748B' }]}>⏳ Pending…</Text>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.chunksBtn}
+              onPress={() => navigation.navigate('RecordingsList', {
+                shiftId,
+                employeeId: rec.employee_id,
+                employeeName: empName,
+                recordingId: rec.id,
+              })}
+            >
+              <Text style={styles.chunksBtnText}>📂 View Chunks</Text>
+            </TouchableOpacity>
+          </>
         )}
       </View>
     );
@@ -599,6 +613,18 @@ const styles = StyleSheet.create({
   summaryBtnProcessing: { backgroundColor: '#1F1C0A', borderColor: '#F59E0B' },
   summaryBtnPending: { backgroundColor: '#1E293B', borderColor: '#334155' },
   summaryBtnText: { color: '#E2E8F0', fontWeight: '600', fontSize: 12 },
+  chunksBtn: {
+    marginTop: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#1E293B',
+    borderWidth: 1,
+    borderColor: '#475569',
+    borderRadius: 8,
+    padding: 9,
+  },
+  chunksBtnText: { color: '#94A3B8', fontWeight: '600', fontSize: 12 },
   // Report section
   reportSection: {
     marginTop: 10,
