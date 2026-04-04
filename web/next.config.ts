@@ -1,7 +1,7 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
-  // Allow cross-origin requests in dev (for HF Spaces, etc.)
+  serverExternalPackages: ['ua-parser-js'],
   async headers() {
     return [
       {
