@@ -98,7 +98,7 @@ export default function ManagerDashboard() {
         const state = presenceChannel.presenceState();
         const online: Record<string, boolean> = {};
         Object.values(state).forEach((presences) => {
-          (presences as Array<{ user_id: string }>).forEach((p) => {
+          (presences as unknown as Array<{ user_id: string }>).forEach((p) => {
             online[p.user_id] = true;
           });
         });
