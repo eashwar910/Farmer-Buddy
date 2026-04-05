@@ -20,7 +20,7 @@ export async function fetchLiveKitToken(
   const { data, error } = await supabase.functions.invoke(
     "generate-livekit-token",
     {
-      body: { shiftId },
+      body: { shiftId, platform: 'mobile' },
       headers: {
         Authorization: `Bearer ${session.access_token}`,
       },

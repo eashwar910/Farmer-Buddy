@@ -50,21 +50,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
+      async (event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
 
         if (session?.user) {
-          // Hold loading=true until profile (and therefore role) is resolved.
-          // Without this, a fresh sign-in sets session+user synchronously and
-          // re-renders the navigator with profile=null before the fetch returns.
-          setLoading(true);
+          // Only hold the loading gate for events that require re-navigating the stack.
+          // TOKEN_REFRESHED is a background event — setting loading=true here would
+          // unmount the Stack.Navigator, reset navigation state, and kick the employee
+          // back to HomeScreen (losing their place mid-shift).
+          if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
+            setLoading(true);
+          }
           const p = await fetchProfile(session.user.id);
           setProfile(p);
         } else {
           setProfile(null);
         }
-        setLoading(false);
+        // Only release the loading gate for events that set it, or on sign-out.
+        if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || !session) {
+          setLoading(false);
+        }
       }
     );
 

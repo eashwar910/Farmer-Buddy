@@ -46,7 +46,7 @@ serve(async (req) => {
     }
 
     // ── 2. Parse body ────────────────────────────────────────────────────────
-    const { shiftId } = await req.json();
+    const { shiftId, platform } = await req.json();
     if (!shiftId) {
       return new Response(JSON.stringify({ error: 'shiftId is required' }), {
         status: 400,
@@ -102,7 +102,9 @@ serve(async (req) => {
     }
 
     const roomName = `shift-${shiftId}`;
-    const participantIdentity = user.id;
+    // Append platform suffix so mobile and web managers can coexist in the same room
+    // without LiveKit kicking one out due to duplicate identity.
+    const participantIdentity = platform ? `${user.id}-${platform}` : user.id;
     const participantName = profile.name || user.email || 'Unknown';
     const isManager = profile.role === 'manager';
 

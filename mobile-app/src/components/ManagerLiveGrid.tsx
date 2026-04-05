@@ -85,7 +85,7 @@ export default function ManagerLiveGrid({ shiftId }: ManagerLiveGridProps) {
       token={token}
       connect={true}
       options={{
-        adaptiveStream: { pixelDensity: 'screen' },
+        adaptiveStream: false,
       }}
       audio={false}
       video={false}

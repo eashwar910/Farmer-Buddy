@@ -88,7 +88,13 @@ export function ShiftProvider({ children }: { children: React.ReactNode }) {
           }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        // Re-fetch on (re)subscription so events missed during network drops or
+        // token refresh reconnects are caught immediately.
+        if (status === 'SUBSCRIBED') {
+          fetchActiveShift();
+        }
+      });
 
     channelRef.current = channel;
 

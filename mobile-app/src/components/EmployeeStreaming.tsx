@@ -141,11 +141,21 @@ export default function EmployeeStreaming({ shiftId, employeeName, onEgressStart
         token={token}
         connect={true}
         options={{
-          adaptiveStream: { pixelDensity: 'screen' },
+          adaptiveStream: false,
+          videoCaptureDefaults: {
+            resolution: { width: 1280, height: 720, frameRate: 30 },
+            facingMode: 'environment',
+          },
+          publishDefaults: {
+            simulcast: false,
+            videoEncoding: {
+              maxBitrate: 1_500_000,
+              maxFramerate: 30,
+            },
+          },
         }}
         audio={false}
         video={true}
-
       >
         <StreamingView
           shiftId={shiftId}
