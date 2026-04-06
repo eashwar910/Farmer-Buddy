@@ -4,7 +4,13 @@
       "Bash(grep -r \"CFBundleDisplayName\\\\|PRODUCT_NAME\" /Users/eashwarsiddha/Documents/UoNM/Year2/Sem2/SEGP_2/mobile-app/ios/*.xcconfig)",
       "Bash(supabase functions:*)",
       "Bash(npm run:*)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m ':*)",
+      "Bash(git push:*)",
+      "Bash(xargs ls:*)",
+      "Bash(node -e \"const ts = require\\('typescript'\\); console.log\\(ts.version\\)\")",
+      "Bash(grep -E \"^/Users.*/\\(App|index\\)\\\\.tsx$\")"
     ]
   }
 }

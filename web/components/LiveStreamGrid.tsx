@@ -47,7 +47,7 @@ export default function LiveStreamGrid({ shiftId }: LiveStreamGridProps) {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${session.access_token}`,
           },
-          body: JSON.stringify({ shiftId: id }),
+          body: JSON.stringify({ shiftId: id, platform: 'web' }),
         },
       );
 
@@ -136,7 +136,7 @@ function StreamGrid() {
     <div
       className={`grid gap-3 ${
         remoteTracks.length === 1
-          ? 'grid-cols-1'
+          ? 'grid-cols-1 max-w-2xl'
           : remoteTracks.length <= 4
           ? 'grid-cols-2'
           : 'grid-cols-3'
@@ -145,7 +145,7 @@ function StreamGrid() {
       {remoteTracks.map((trackRef) => (
         <div
           key={`${trackRef.participant.sid}-${trackRef.publication?.trackSid}`}
-          className="relative bg-black rounded-xl overflow-hidden aspect-video border border-fb-border"
+          className="relative bg-black rounded-xl overflow-hidden aspect-video border border-fb-border max-h-[480px]"
         >
           <VideoTrack trackRef={trackRef} className="w-full h-full object-cover" />
 

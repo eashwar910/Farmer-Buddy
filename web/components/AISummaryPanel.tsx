@@ -85,12 +85,11 @@ export default function AISummaryPanel({ shiftId }: AISummaryPanelProps) {
       employeeMap[e.id] = e;
     });
 
-    // Get chunks with summaries
+    // Get all chunks (pending/processing/completed/failed) to match mobile app view
     const { data: chunkData } = await supabase
       .from('recording_chunks')
       .select('id, chunk_index, started_at, ended_at, summary, processing_status, recording_id')
       .in('recording_id', recordingIds)
-      .eq('processing_status', 'completed')
       .order('started_at', { ascending: false });
 
     if (chunkData) {
@@ -120,9 +119,9 @@ export default function AISummaryPanel({ shiftId }: AISummaryPanelProps) {
   if (chunks.length === 0) {
     return (
       <div className="bg-fb-card rounded-xl border border-fb-border p-6 text-center">
-        <p className="text-fb-subtext text-sm">No AI summaries yet.</p>
+        <p className="text-fb-subtext text-sm">No recordings yet.</p>
         <p className="text-fb-subtext/50 text-xs mt-1">
-          Summaries appear here as video chunks are processed.
+          Chunks appear here once employees start streaming.
         </p>
       </div>
     );
@@ -151,7 +150,11 @@ function SummaryCard({
   expanded: boolean;
   onToggle: () => void;
 }) {
-  const parsed = parseSummary(chunk.summary);
+  const isCompleted = chunk.processing_status === 'completed';
+  const isProcessing = chunk.processing_status === 'processing';
+  const isFailed = chunk.processing_status === 'failed';
+  const parsed = isCompleted ? parseSummary(chunk.summary) : null;
+
   const timeLabel = chunk.started_at
     ? new Date(chunk.started_at).toLocaleTimeString([], {
         hour: '2-digit',
@@ -159,27 +162,59 @@ function SummaryCard({
       })
     : `Chunk ${chunk.chunk_index + 1}`;
 
+  const statusBadge = isCompleted ? null : isProcessing ? (
+    <span className="text-xs text-amber-400 bg-amber-400/10 border border-amber-400/20 rounded-full px-2 py-0.5">
+      Processing…
+    </span>
+  ) : isFailed ? (
+    <span className="text-xs text-fb-red bg-fb-red/10 border border-fb-red/20 rounded-full px-2 py-0.5">
+      Failed
+    </span>
+  ) : (
+    <span className="text-xs text-fb-subtext bg-fb-card border border-fb-border rounded-full px-2 py-0.5">
+      Pending
+    </span>
+  );
+
   return (
-    <div className="bg-fb-card border border-fb-border rounded-xl overflow-hidden">
+    <div className={`bg-fb-card border rounded-xl overflow-hidden ${isFailed ? 'border-fb-red/30 opacity-70' : 'border-fb-border'}`}>
       {/* Header */}
       <button
-        onClick={onToggle}
-        className="w-full flex items-center justify-between p-4 text-left hover:bg-white/5 transition-colors"
+        onClick={isCompleted ? onToggle : undefined}
+        className={`w-full flex items-center justify-between p-4 text-left transition-colors ${isCompleted ? 'hover:bg-white/5 cursor-pointer' : 'cursor-default'}`}
       >
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-fb-accent/15 border border-fb-accent/30 flex items-center justify-center flex-shrink-0">
-            <span className="text-xs font-bold text-fb-accent">AI</span>
+        <div className="flex items-center gap-3 min-w-0">
+          <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
+            isCompleted ? 'bg-fb-accent/15 border border-fb-accent/30' :
+            isProcessing ? 'bg-amber-400/10 border border-amber-400/20' :
+            isFailed ? 'bg-fb-red/10 border border-fb-red/20' :
+            'bg-fb-border/30 border border-fb-border'
+          }`}>
+            {isProcessing ? (
+              <div className="w-3 h-3 border border-amber-400 border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <span className="text-xs font-bold text-fb-accent">AI</span>
+            )}
           </div>
-          <div>
-            <div className="text-fb-text text-sm font-semibold">
+          <div className="min-w-0">
+            <div className="text-fb-text text-sm font-semibold flex items-center gap-2 flex-wrap">
               {chunk.employee?.name ?? 'Employee'} — {timeLabel}
+              {statusBadge}
             </div>
             <div className="text-fb-subtext text-xs mt-0.5 line-clamp-1">
-              {parsed?.executive_summary ?? 'No summary available'}
+              {isCompleted
+                ? (parsed?.executive_summary ?? 'Summary ready')
+                : isProcessing
+                ? 'AI is processing this recording…'
+                : isFailed
+                ? 'AI processing failed for this chunk'
+                : 'Summary will be generated automatically'}
             </div>
           </div>
         </div>
-        <span className="text-fb-subtext text-lg ml-3">{expanded ? '∧' : '∨'}</span>
+        {isCompleted && (
+          <span className="text-fb-subtext text-lg ml-3 flex-shrink-0">{expanded ? '∧' : '∨'}</span>
+        )}
       </button>
 
       {/* Expanded content */}

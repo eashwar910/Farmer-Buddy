@@ -28,14 +28,15 @@ interface Shift {
   id: string;
   status: 'active' | 'ended';
   started_at: string;
+  ended_at?: string | null;
 }
 
-type TabKey = 'overview' | 'streams' | 'summaries' | 'leaf' | 'chat';
+type TabKey = 'overview' | 'streams' | 'shifts' | 'leaf' | 'chat';
 
 const TABS: { key: TabKey; label: string; icon: string }[] = [
   { key: 'overview', label: 'Overview', icon: '🏠' },
   { key: 'streams', label: 'Live Streams', icon: '📹' },
-  { key: 'summaries', label: 'AI Summaries', icon: '🤖' },
+  { key: 'shifts', label: 'Shifts', icon: '📋' },
   { key: 'leaf', label: 'Leaf Detection', icon: '🌿' },
   { key: 'chat', label: 'Agronomist', icon: '💬' },
 ];
@@ -80,7 +81,7 @@ export default function ManagerDashboard() {
     setProfile(profileData);
 
     // Load employees and active shift in parallel
-    const [empRes, shiftRes] = await Promise.all([
+    const [empRes, activeShiftRes] = await Promise.all([
       supabase.from('users').select('id, name, email').eq('role', 'employee').order('name'),
       supabase
         .from('shifts')
@@ -91,7 +92,8 @@ export default function ManagerDashboard() {
     ]);
 
     setEmployees((empRes.data as Employee[]) ?? []);
-    setActiveShift(shiftRes.data?.[0] ?? null);
+    const active = activeShiftRes.data?.[0] ?? null;
+    setActiveShift(active);
 
     // Supabase Presence channel
     const presenceChannel = supabase.channel('online-users');
@@ -224,8 +226,8 @@ export default function ManagerDashboard() {
           <StreamsTab activeShift={activeShift} />
         )}
 
-        {activeTab === 'summaries' && (
-          <SummariesTab activeShift={activeShift} />
+        {activeTab === 'shifts' && (
+          <ShiftsTab />
         )}
 
         {activeTab === 'leaf' && (
@@ -383,7 +385,7 @@ function StreamsTab({ activeShift }: { activeShift: Shift | null }) {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 max-w-4xl">
       <div className="flex items-center gap-2">
         <div className="w-2.5 h-2.5 rounded-full bg-fb-accent animate-pulse" />
         <span className="text-fb-accent text-sm font-semibold">Live — Shift Active</span>
@@ -393,25 +395,304 @@ function StreamsTab({ activeShift }: { activeShift: Shift | null }) {
   );
 }
 
-/* ─────────────────── Summaries Tab ─────────────────── */
+/* ─────────────────── Shifts Tab ─────────────────── */
 
-function SummariesTab({ activeShift }: { activeShift: Shift | null }) {
-  if (!activeShift) {
+interface ShiftWithCounts {
+  id: string;
+  status: 'active' | 'ended';
+  started_at: string;
+  ended_at: string | null;
+  recording_count: number;
+}
+
+function shiftFormatDate(iso: string) {
+  return new Date(iso).toLocaleDateString([], {
+    weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
+  });
+}
+function shiftFormatTime(iso: string) {
+  return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+function shiftFormatDuration(startIso: string, endIso: string | null) {
+  if (!endIso) return 'Ongoing';
+  const ms = new Date(endIso).getTime() - new Date(startIso).getTime();
+  const totalMins = Math.round(ms / 60000);
+  const h = Math.floor(totalMins / 60);
+  const m = totalMins % 60;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
+}
+
+function ShiftsTab() {
+  const supabase = getSupabaseClient();
+  const [shifts, setShifts] = useState<ShiftWithCounts[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState<ShiftWithCounts | null>(null);
+
+  const fetchShifts = async () => {
+    const { data: shiftData } = await supabase
+      .from('shifts')
+      .select('*')
+      .order('started_at', { ascending: false });
+
+    const { data: recData } = await supabase
+      .from('recordings')
+      .select('shift_id');
+
+    const counts: Record<string, number> = {};
+    (recData ?? []).forEach((r: { shift_id: string }) => {
+      counts[r.shift_id] = (counts[r.shift_id] ?? 0) + 1;
+    });
+
+    setShifts(
+      (shiftData ?? []).map((s: Shift & { ended_at?: string | null }) => ({
+        ...s,
+        ended_at: s.ended_at ?? null,
+        recording_count: counts[s.id] ?? 0,
+      }))
+    );
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    fetchShifts();
+    const channel = supabase
+      .channel('shifts-tab-watch')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'shifts' }, fetchShifts)
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (loading) {
     return (
-      <EmptyState
-        message="No active shift"
-        sub="AI summaries appear here as employee video chunks are processed during an active shift."
-        icon="🤖"
+      <div className="max-w-3xl space-y-3">
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="h-28 bg-fb-card rounded-xl border border-fb-border animate-pulse" />
+        ))}
+      </div>
+    );
+  }
+
+  if (selected) {
+    return (
+      <ShiftDetailView
+        shift={selected}
+        onBack={() => setSelected(null)}
       />
     );
   }
 
   return (
     <div className="max-w-3xl">
-      <p className="text-fb-subtext text-sm mb-4">
-        AI-generated summaries update in real time as video chunks are processed.
-      </p>
-      <AISummaryPanel shiftId={activeShift.id} />
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-lg font-bold text-fb-text">Shifts</h2>
+        <span className="text-fb-subtext text-sm">{shifts.length} total</span>
+      </div>
+
+      {shifts.length === 0 ? (
+        <EmptyState
+          message="No shifts yet"
+          sub="Shifts will appear here once started from the mobile app."
+          icon="📋"
+        />
+      ) : (
+        <div className="space-y-3">
+          {shifts.map((shift) => (
+            <ShiftCard key={shift.id} shift={shift} onClick={() => setSelected(shift)} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ShiftCard({ shift, onClick }: { shift: ShiftWithCounts; onClick: () => void }) {
+  const isActive = shift.status === 'active';
+  return (
+    <button
+      onClick={onClick}
+      className={`w-full text-left rounded-xl border p-4 transition-colors hover:bg-white/5 ${
+        isActive ? 'border-fb-accent/30 bg-fb-accent/5' : 'border-fb-border bg-fb-card'
+      }`}
+    >
+      <div className="flex items-start justify-between mb-3">
+        <div>
+          <p className="font-bold text-fb-text text-sm">{shiftFormatDate(shift.started_at)}</p>
+          <p className="text-fb-subtext text-xs mt-0.5">
+            {shiftFormatTime(shift.started_at)}
+            {shift.ended_at ? ` – ${shiftFormatTime(shift.ended_at)}` : ''}
+          </p>
+        </div>
+        <div className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold ${
+          isActive ? 'bg-fb-accent/10 text-fb-accent' : 'bg-fb-border/30 text-fb-subtext'
+        }`}>
+          {isActive && <div className="w-1.5 h-1.5 rounded-full bg-fb-accent animate-pulse" />}
+          {isActive ? 'ACTIVE' : 'ENDED'}
+        </div>
+      </div>
+
+      <div className="flex bg-fb-bg rounded-lg overflow-hidden">
+        <div className="flex-1 text-center py-3">
+          <p className="font-bold text-fb-text">{shiftFormatDuration(shift.started_at, shift.ended_at)}</p>
+          <p className="text-fb-subtext text-xs mt-0.5">Duration</p>
+        </div>
+        <div className="w-px bg-fb-border" />
+        <div className="flex-1 text-center py-3">
+          <p className="font-bold text-fb-text">{shift.recording_count}</p>
+          <p className="text-fb-subtext text-xs mt-0.5">
+            Recording{shift.recording_count !== 1 ? 's' : ''}
+          </p>
+        </div>
+      </div>
+    </button>
+  );
+}
+
+function ShiftDetailView({ shift, onBack }: { shift: ShiftWithCounts; onBack: () => void }) {
+  const supabase = getSupabaseClient();
+  const [employees, setEmployees] = useState<Array<{ id: string; name: string }>>([]);
+  const [reports, setReports] = useState<Array<{ employee_id: string; report_url: string }>>([]);
+  const [generating, setGenerating] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchDetail();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shift.id]);
+
+  const fetchDetail = async () => {
+    const [{ data: recs }, { data: reportData }] = await Promise.all([
+      supabase.from('recordings').select('employee_id').eq('shift_id', shift.id),
+      supabase.from('shift_reports').select('employee_id, report_url').eq('shift_id', shift.id),
+    ]);
+
+    if (recs && recs.length > 0) {
+      const empIds = [...new Set((recs as { employee_id: string }[]).map((r) => r.employee_id))];
+      const { data: empData } = await supabase
+        .from('users').select('id, name').in('id', empIds);
+      setEmployees((empData ?? []) as { id: string; name: string }[]);
+    }
+    setReports((reportData ?? []) as { employee_id: string; report_url: string }[]);
+  };
+
+  const handleGenerateReport = async (employeeId: string) => {
+    setGenerating(employeeId);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) return;
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/generate-shift-report`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ shiftId: shift.id, employeeId }),
+        }
+      );
+      if (res.ok) await fetchDetail();
+    } finally {
+      setGenerating(null);
+    }
+  };
+
+  const isEnded = shift.status === 'ended';
+
+  return (
+    <div className="max-w-3xl">
+      <button
+        onClick={onBack}
+        className="flex items-center gap-1.5 text-fb-subtext hover:text-fb-text text-sm mb-5 transition-colors"
+      >
+        ← Back to Shifts
+      </button>
+
+      {/* Shift header */}
+      <div className={`rounded-xl border p-4 mb-5 ${
+        shift.status === 'active'
+          ? 'border-fb-accent/30 bg-fb-accent/5'
+          : 'border-fb-border bg-fb-card'
+      }`}>
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="font-bold text-fb-text">{shiftFormatDate(shift.started_at)}</p>
+            <p className="text-fb-subtext text-sm mt-1">
+              {shiftFormatTime(shift.started_at)}
+              {shift.ended_at ? ` – ${shiftFormatTime(shift.ended_at)}` : ' – ongoing'}
+            </p>
+          </div>
+          <div className={`rounded-full px-3 py-1 text-xs font-bold border ${
+            shift.status === 'active'
+              ? 'bg-fb-accent/10 text-fb-accent border-fb-accent/30'
+              : 'bg-fb-border/20 text-fb-subtext border-fb-border'
+          }`}>
+            {shift.status === 'active' ? 'ACTIVE' : 'ENDED'}
+          </div>
+        </div>
+        <div className="flex gap-6 mt-3 pt-3 border-t border-fb-border">
+          <div>
+            <p className="text-fb-text font-bold">{shiftFormatDuration(shift.started_at, shift.ended_at)}</p>
+            <p className="text-fb-subtext text-xs">Duration</p>
+          </div>
+          <div>
+            <p className="text-fb-text font-bold">{shift.recording_count}</p>
+            <p className="text-fb-subtext text-xs">Recordings</p>
+          </div>
+        </div>
+      </div>
+
+      {/* AI Summaries */}
+      <div className="mb-6">
+        <h3 className="text-xs font-bold text-fb-subtext uppercase tracking-wider mb-3">AI Summaries</h3>
+        <AISummaryPanel shiftId={shift.id} />
+      </div>
+
+      {/* Shift Reports — only for ended shifts with employees */}
+      {isEnded && employees.length > 0 && (
+        <div>
+          <h3 className="text-xs font-bold text-fb-subtext uppercase tracking-wider mb-3">Shift Reports</h3>
+          <div className="space-y-2">
+            {employees.map((emp) => {
+              const report = reports.find((r) => r.employee_id === emp.id);
+              const isGen = generating === emp.id;
+              return (
+                <div
+                  key={emp.id}
+                  className="flex items-center justify-between bg-fb-card border border-fb-border rounded-xl px-4 py-3"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-fb-accent/20 border border-fb-accent/30 flex items-center justify-center flex-shrink-0">
+                      <span className="text-fb-accent text-xs font-bold">
+                        {emp.name?.charAt(0)?.toUpperCase() ?? '?'}
+                      </span>
+                    </div>
+                    <span className="text-fb-text text-sm font-semibold">{emp.name}</span>
+                  </div>
+                  {report ? (
+                    <a
+                      href={report.report_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs font-semibold text-fb-accent border border-fb-accent/30 bg-fb-accent/10 rounded-lg px-3 py-1.5 hover:bg-fb-accent/20 transition-colors"
+                    >
+                      View Report
+                    </a>
+                  ) : (
+                    <button
+                      onClick={() => handleGenerateReport(emp.id)}
+                      disabled={!!isGen}
+                      className="text-xs font-semibold text-fb-text border border-fb-border bg-fb-bg rounded-lg px-3 py-1.5 hover:bg-white/5 disabled:opacity-50 transition-colors"
+                    >
+                      {isGen ? 'Generating…' : 'Generate Report'}
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
