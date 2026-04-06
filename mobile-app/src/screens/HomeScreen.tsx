@@ -1,12 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  ActivityIndicator, Alert, ScrollView, Dimensions,
+  ScrollView, Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../hooks/useAuth';
 import { useAppContext } from '../context/AppContext';
-import { supabase } from '../services/supabase';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -17,9 +16,8 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const BUTTON_SIZE = Math.floor((SCREEN_WIDTH - 32 - 12) / 2);
 
 export default function HomeScreen({ navigation }: any) {
-  const { profile, user, refreshProfile } = useAuth();
+  const { profile } = useAuth();
   const { themeColors, t } = useAppContext();
-  const [updatingRole, setUpdatingRole] = useState(false);
   const [stats, setStats] = useState({ sensorCount: 0, lastScan: '' });
 
   useEffect(() => {
@@ -45,44 +43,10 @@ export default function HomeScreen({ navigation }: any) {
   };
 
   const handleBodycamPress = () => {
+    if (profile?.role === 'gardener') return; // gardeners have no bodycam access
     if (profile?.role) {
       navigation.navigate(profile.role === 'manager' ? 'ManagerTabs' : 'EmployeeTabs');
       return;
-    }
-    setUpdatingRole(true);
-    if (user) {
-      // Optimistically update and navigate immediately to prevent infinite loading spinner
-      supabase.from('users').update({ role: 'employee' }).eq('id', user.id).then(({ error }) => {
-        if (error) {
-          console.error("Role update failed:", error);
-          Alert.alert('Error', 'Could not update role. Please try again.');
-        } else {
-          refreshProfile().catch(console.error);
-        }
-      });
-      setUpdatingRole(false);
-      navigation.navigate('EmployeeTabs');
-    } else {
-      setUpdatingRole(false);
-    }
-  };
-
-  const handleManagerPress = () => {
-    setUpdatingRole(true);
-    if (user) {
-      // Optimistically update and navigate immediately
-      supabase.from('users').update({ role: 'manager' }).eq('id', user.id).then(({ error }) => {
-        if (error) {
-          console.error("Role update failed:", error);
-          Alert.alert('Error', 'Could not update role. Please try again.');
-        } else {
-          refreshProfile().catch(console.error);
-        }
-      });
-      setUpdatingRole(false);
-      navigation.navigate('ManagerTabs');
-    } else {
-      setUpdatingRole(false);
     }
   };
 
@@ -112,22 +76,20 @@ export default function HomeScreen({ navigation }: any) {
 
         {/* Feature Grid */}
         <View style={styles.gridContainer}>
-          {/* Top row: Bodycam + Leaf Detection */}
-          <View style={styles.gridRow}>
-            <TouchableOpacity onPress={handleBodycamPress} disabled={updatingRole} activeOpacity={0.8}>
-              <LinearGradient colors={['#374151', '#111827']} style={[styles.gridButton, { width: BUTTON_SIZE, height: BUTTON_SIZE }]}>
-                <View style={styles.gridIconCircle}>
-                  {updatingRole ? (
-                    <ActivityIndicator size="small" color="#fff" />
-                  ) : (
+          {/* Top row: Bodycam (hidden for gardeners) + Leaf Detection */}
+          <View style={profile?.role === 'gardener' ? styles.gridRowCentered : styles.gridRow}>
+            {profile?.role !== 'gardener' && (
+              <TouchableOpacity onPress={handleBodycamPress} activeOpacity={0.8}>
+                <LinearGradient colors={['#374151', '#111827']} style={[styles.gridButton, { width: BUTTON_SIZE, height: BUTTON_SIZE }]}>
+                  <View style={styles.gridIconCircle}>
                     <MaterialCommunityIcons name="video-outline" size={30} color="#fff" />
-                  )}
-                </View>
-                <Text style={styles.gridLabel}>{t('bodycam')}</Text>
-              </LinearGradient>
-            </TouchableOpacity>
+                  </View>
+                  <Text style={styles.gridLabel}>{t('bodycam')}</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            )}
 
-            <TouchableOpacity onPress={handleLeafDetectionPress} disabled={updatingRole} activeOpacity={0.8}>
+            <TouchableOpacity onPress={handleLeafDetectionPress} activeOpacity={0.8}>
               <LinearGradient colors={['#065f46', '#022c22']} style={[styles.gridButton, { width: BUTTON_SIZE, height: BUTTON_SIZE }]}>
                 <View style={styles.gridIconCircle}>
                   <MaterialCommunityIcons name="leaf" size={30} color="#4ade80" />
@@ -139,7 +101,7 @@ export default function HomeScreen({ navigation }: any) {
 
           {/* Bottom centered: IoT Sensor + Agronomist Chat */}
           <View style={styles.gridRow}>
-            <TouchableOpacity onPress={handleIoTPress} disabled={updatingRole} activeOpacity={0.8}>
+            <TouchableOpacity onPress={handleIoTPress} activeOpacity={0.8}>
               <LinearGradient colors={['#1e40af', '#172554']} style={[styles.gridButton, { width: BUTTON_SIZE, height: BUTTON_SIZE }]}>
                 <View style={styles.gridIconCircle}>
                   <MaterialCommunityIcons name="signal-variant" size={30} color="#60a5fa" />
@@ -148,7 +110,7 @@ export default function HomeScreen({ navigation }: any) {
               </LinearGradient>
             </TouchableOpacity>
 
-            <TouchableOpacity onPress={handleAgronomistChatPress} disabled={updatingRole} activeOpacity={0.8}>
+            <TouchableOpacity onPress={handleAgronomistChatPress} activeOpacity={0.8}>
               <LinearGradient colors={['#9333ea', '#4c1d95']} style={[styles.gridButton, { width: BUTTON_SIZE, height: BUTTON_SIZE }]}>
                 <View style={styles.gridIconCircle}>
                   <MaterialCommunityIcons name="robot-outline" size={30} color="#c084fc" />
@@ -170,13 +132,6 @@ export default function HomeScreen({ navigation }: any) {
           </Text>
         </View>
 
-        {profile !== null && !profile?.role && !updatingRole && (
-          <View style={styles.footer}>
-            <TouchableOpacity onPress={handleManagerPress}>
-              <Text style={styles.managerText}>If you are a manager, click this</Text>
-            </TouchableOpacity>
-          </View>
-        )}
 
       </ScrollView>
     </SafeAreaView>
@@ -271,15 +226,5 @@ const getStyles = (themeColors: any) => StyleSheet.create({
   quickStatsDot: {
     fontSize: 12,
     color: themeColors.subtext,
-  },
-  footer: {
-    marginTop: 40,
-    alignItems: 'center',
-  },
-  managerText: {
-    color: themeColors.subtext,
-    fontSize: 14,
-    textDecorationLine: 'underline',
-    padding: 8,
   },
 });

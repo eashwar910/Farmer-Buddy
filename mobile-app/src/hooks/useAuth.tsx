@@ -8,7 +8,7 @@ interface AuthContextType {
   user: User | null;
   profile: UserProfile | null;
   loading: boolean;
-  signUp: (email: string, password: string, name: string) => Promise<{ error: any }>;
+  signUp: (email: string, password: string, name: string, role: string) => Promise<{ error: any }>;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
@@ -90,7 +90,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user]);
 
-  const signUp = async (email: string, password: string, name: string) => {
+  const signUp = async (email: string, password: string, name: string, role: string) => {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -101,14 +101,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (error) return { error };
 
-    // Create user profile row
+    // Create user profile row with role assigned at sign-up
     if (data.user) {
-      const { error: profileError } = await supabase.from('users').insert({
+      const { error: profileError } = await supabase.from('users').upsert({
         id: data.user.id,
         email,
         name,
-        role: null,
-      });
+        role,
+      }, { onConflict: 'id' });
       if (profileError) {
         console.error('Error creating profile:', profileError.message);
         return { error: profileError };

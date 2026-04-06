@@ -1,6 +1,7 @@
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { ActivityIndicator, View, Text, StyleSheet } from 'react-native';
+import { ActivityIndicator, View, StyleSheet } from 'react-native';
+
 import { useAuth } from '../hooks/useAuth';
 import AuthStack from './AuthStack';
 import ManagerTabs from './ManagerTabs';
@@ -16,6 +17,7 @@ import { RootStackParamList } from './types';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
+
 export default function RootNavigator() {
   const { session, profile, loading } = useAuth();
 
@@ -28,8 +30,7 @@ export default function RootNavigator() {
   }
 
   const isLoggedIn = !!session;
-  const isManager = profile?.role === 'manager';
-  const isEmployee = profile?.role === 'employee';
+  const isGardener = profile?.role === 'gardener';
 
   return (
     <Stack.Navigator
@@ -45,49 +46,58 @@ export default function RootNavigator() {
       ) : (
         <Stack.Group>
           <Stack.Screen name="Home" component={HomeScreen} />
-          <Stack.Screen 
-            name="ManagerTabs" 
-            component={ManagerTabs} 
-            options={{ headerShown: true, title: 'Bodycam Manager' }} 
-          />
-          <Stack.Screen 
-            name="EmployeeTabs" 
-            component={EmployeeTabs} 
-            options={{ headerShown: true, title: 'Bodycam App' }} 
-          />
-          <Stack.Screen 
-            name="LeafDetection" 
+          {/* Bodycam screens — excluded from stack entirely for gardeners */}
+          {!isGardener && (
+            <Stack.Screen
+              name="ManagerTabs"
+              component={ManagerTabs}
+              options={{ headerShown: true, title: 'Bodycam Manager' }}
+            />
+          )}
+          {!isGardener && (
+            <Stack.Screen
+              name="EmployeeTabs"
+              component={EmployeeTabs}
+              options={{ headerShown: true, title: 'Bodycam App' }}
+            />
+          )}
+          {!isGardener && (
+            <Stack.Screen
+              name="RecordingsList"
+              component={RecordingsListScreen}
+              options={{ headerShown: true, title: 'Recordings' }}
+            />
+          )}
+          {!isGardener && (
+            <Stack.Screen
+              name="ShiftDetails"
+              component={ShiftDetailsScreen}
+              options={{ headerShown: true, title: 'Shift Details' }}
+            />
+          )}
+          {/* Agriculture screens — available to all roles */}
+          <Stack.Screen
+            name="LeafDetection"
             component={LeafDetectionScreen}
             options={{ headerShown: true, title: 'Leaf Detection' }}
           />
-          <Stack.Screen 
-            name="IoTSensorScreen" 
+          <Stack.Screen
+            name="IoTSensorScreen"
             component={IoTSensorScreen}
             options={{ headerShown: true, title: 'Farm Sensor Analysis' }}
           />
-          <Stack.Screen 
-            name="AgronomistChat" 
+          <Stack.Screen
+            name="AgronomistChat"
             component={AgronomistChatScreen}
             options={{ headerShown: false }}
           />
-          <Stack.Screen 
-            name="SettingsScreen" 
+          <Stack.Screen
+            name="SettingsScreen"
             component={SettingsScreen}
             options={{ headerShown: true, title: 'Settings' }}
           />
         </Stack.Group>
       )}
-      {/* Shared screens accessible from any tab */}
-      <Stack.Screen
-        name="RecordingsList"
-        component={RecordingsListScreen}
-        options={{ headerShown: true, title: 'Recordings' }}
-      />
-      <Stack.Screen
-        name="ShiftDetails"
-        component={ShiftDetailsScreen}
-        options={{ headerShown: true, title: 'Shift Details' }}
-      />
     </Stack.Navigator>
   );
 }
