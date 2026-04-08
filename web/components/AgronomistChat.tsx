@@ -193,7 +193,7 @@ export default function AgronomistChat() {
             alt="Preview"
             className="h-12 w-12 object-cover rounded-lg border border-fb-border"
           />
-          <button onClick={clearImage} className="text-fb-subtext hover:text-fb-red text-xs transition-colors">
+          <button onClick={clearImage} className="text-fb-subtext hover:text-fb-alert text-xs transition-colors">
             Remove
           </button>
         </div>

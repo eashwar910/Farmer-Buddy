@@ -44,13 +44,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
+      if (error?.message?.includes('Refresh Token Not Found') || error?.message?.includes('Invalid Refresh Token')) {
+        // Stale session in AsyncStorage — wipe it and force re-login
+        supabase.auth.signOut().finally(() => {
+          setSession(null);
+          setUser(null);
+          setProfile(null);
+          setLoading(false);
+        });
+        return;
+      }
       setSession(session);
       setUser(session?.user ?? null);
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        // TOKEN_REFRESH_FAILED fires when the stored refresh token is invalid
+        if (event === 'TOKEN_REFRESHED' && !session) {
+          setSession(null);
+          setUser(null);
+          setProfile(null);
+          setLoading(false);
+          return;
+        }
+
         setSession(session);
         setUser(session?.user ?? null);
 

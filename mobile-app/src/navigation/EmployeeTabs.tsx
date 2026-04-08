@@ -4,24 +4,26 @@ import EmployeeDashboardScreen from '../screens/EmployeeDashboardScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import { EmployeeTabParamList } from './types';
 import { Text } from 'react-native';
+import { useAppContext } from '../context/AppContext';
 
 const Tab = createBottomTabNavigator<EmployeeTabParamList>();
 
 export default function EmployeeTabs() {
+  const { themeColors } = useAppContext();
   return (
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
-          backgroundColor: '#1E293B',
-          borderTopColor: '#334155',
+          backgroundColor: themeColors.card,
+          borderTopColor: themeColors.border,
           borderTopWidth: 1,
           paddingBottom: 8,
           paddingTop: 8,
           height: 60,
         },
-        tabBarActiveTintColor: '#10B981',
-        tabBarInactiveTintColor: '#64748B',
+        tabBarActiveTintColor: themeColors.accent,
+        tabBarInactiveTintColor: themeColors.faint,
         tabBarLabelStyle: {
           fontSize: 12,
           fontWeight: '600',

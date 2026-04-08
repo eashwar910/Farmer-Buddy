@@ -6,13 +6,14 @@ import {
   FlatList,
   TouchableOpacity,
   ActivityIndicator,
-  SafeAreaView,
   RefreshControl,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { supabase } from '../services/supabase';
 import { useAuth } from '../hooks/useAuth';
+import { useAppContext } from '../context/AppContext';
 import { RootStackParamList } from '../navigation/types';
 
 type NavProp = NativeStackNavigationProp<RootStackParamList>;
@@ -58,6 +59,7 @@ function formatDuration(startIso: string, endIso: string | null): string {
 export default function ShiftsScreen() {
   const navigation = useNavigation<NavProp>();
   const { profile } = useAuth();
+  const { themeColors } = useAppContext();
   const [shifts, setShifts] = useState<ShiftWithCounts[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -77,7 +79,6 @@ export default function ShiftsScreen() {
       return;
     }
 
-    // Fetch recording counts per shift
     const { data: recData } = await supabase
       .from('recordings')
       .select('shift_id');
@@ -102,7 +103,6 @@ export default function ShiftsScreen() {
   useEffect(() => {
     fetchShifts();
 
-    // Subscribe to realtime shift changes
     const channel = supabase
       .channel('shifts-list')
       .on(
@@ -119,6 +119,8 @@ export default function ShiftsScreen() {
     setRefreshing(true);
     fetchShifts();
   };
+
+  const styles = getStyles(themeColors);
 
   const renderShift = ({ item }: { item: ShiftWithCounts }) => {
     const isActive = item.status === 'active';
@@ -168,16 +170,16 @@ export default function ShiftsScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#3B82F6" />
+          <ActivityIndicator size="large" color={themeColors.accent} />
         </View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Shifts</Text>
         <Text style={styles.headerSub}>{shifts.length} shift{shifts.length !== 1 ? 's' : ''} total</Text>
@@ -202,8 +204,8 @@ export default function ShiftsScreen() {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={handleRefresh}
-              tintColor="#3B82F6"
-              colors={['#3B82F6']}
+              tintColor={themeColors.accent}
+              colors={[themeColors.accent]}
             />
           }
         />
@@ -212,10 +214,10 @@ export default function ShiftsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (themeColors: any) => StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#0F172A',
+    backgroundColor: themeColors.background,
   },
   centered: {
     flex: 1,
@@ -227,33 +229,40 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#1E293B',
+    borderBottomColor: themeColors.border,
   },
   headerTitle: {
     fontSize: 26,
     fontWeight: '700',
-    color: '#F8FAFC',
+    color: themeColors.heading,
+    fontFamily: 'CabinetGrotesk-Bold',
   },
   headerSub: {
     fontSize: 13,
-    color: '#64748B',
+    color: themeColors.subtext,
     marginTop: 2,
+    fontFamily: 'Satoshi-Regular',
   },
   list: {
     padding: 16,
     paddingBottom: 100,
   },
   card: {
-    backgroundColor: '#1E293B',
+    backgroundColor: themeColors.card,
     borderRadius: 14,
     padding: 16,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: themeColors.border,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 2,
   },
   cardActive: {
-    borderColor: '#22C55E',
-    backgroundColor: '#0D2818',
+    borderColor: themeColors.statusOk,
+    backgroundColor: themeColors.elevatedCard,
   },
   cardTop: {
     flexDirection: 'row',
@@ -267,12 +276,14 @@ const styles = StyleSheet.create({
   dateText: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#F8FAFC',
+    color: themeColors.text,
     marginBottom: 2,
+    fontFamily: 'CabinetGrotesk-Bold',
   },
   timeText: {
     fontSize: 13,
-    color: '#94A3B8',
+    color: themeColors.subtext,
+    fontFamily: 'Satoshi-Regular',
   },
   badge: {
     flexDirection: 'row',
@@ -283,28 +294,29 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   badgeActive: {
-    backgroundColor: 'rgba(34,197,94,0.15)',
+    backgroundColor: themeColors.statusOk + '26', // ~15% opacity
   },
   badgeEnded: {
-    backgroundColor: 'rgba(100,116,139,0.2)',
+    backgroundColor: themeColors.faint + '33', // ~20% opacity
   },
   liveDot: {
     width: 7,
     height: 7,
     borderRadius: 4,
-    backgroundColor: '#22C55E',
+    backgroundColor: themeColors.statusOk,
   },
   badgeText: {
     fontSize: 11,
     fontWeight: '700',
     letterSpacing: 0.5,
+    fontFamily: 'Satoshi-Regular',
   },
-  badgeTextActive: { color: '#22C55E' },
-  badgeTextEnded: { color: '#64748B' },
+  badgeTextActive: { color: themeColors.statusOk },
+  badgeTextEnded: { color: themeColors.faint },
   cardBottom: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#0F172A',
+    backgroundColor: themeColors.background,
     borderRadius: 10,
     padding: 12,
   },
@@ -315,24 +327,26 @@ const styles = StyleSheet.create({
   statValue: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#F8FAFC',
+    color: themeColors.text,
+    fontFamily: 'CabinetGrotesk-Bold',
   },
   statLabel: {
     fontSize: 11,
-    color: '#64748B',
+    color: themeColors.subtext,
     marginTop: 2,
+    fontFamily: 'Satoshi-Regular',
   },
   divider: {
     width: 1,
     height: 30,
-    backgroundColor: '#334155',
+    backgroundColor: themeColors.border,
   },
   arrow: {
     position: 'absolute',
     right: 16,
     top: '50%',
     fontSize: 26,
-    color: '#334155',
+    color: themeColors.border,
     marginTop: -4,
   },
   emptyState: {
@@ -348,13 +362,15 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#F8FAFC',
+    color: themeColors.heading,
     marginBottom: 8,
+    fontFamily: 'CabinetGrotesk-Bold',
   },
   emptySub: {
     fontSize: 14,
-    color: '#64748B',
+    color: themeColors.subtext,
     textAlign: 'center',
     lineHeight: 21,
+    fontFamily: 'Satoshi-Regular',
   },
 });

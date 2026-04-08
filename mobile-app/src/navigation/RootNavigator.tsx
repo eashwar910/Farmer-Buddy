@@ -3,6 +3,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { ActivityIndicator, View, StyleSheet } from 'react-native';
 
 import { useAuth } from '../hooks/useAuth';
+import { useAppContext } from '../context/AppContext';
 import AuthStack from './AuthStack';
 import ManagerTabs from './ManagerTabs';
 import EmployeeTabs from './EmployeeTabs';
@@ -12,6 +13,7 @@ import HomeScreen from '../screens/HomeScreen';
 import LeafDetectionScreen from '../screens/LeafDetectionScreen';
 import IoTSensorScreen from '../screens/IoTSensorScreen';
 import AgronomistChatScreen from '../screens/AgronomistChatScreen';
+import IrrigationTimerScreen from '../screens/IrrigationTimerScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import { RootStackParamList } from './types';
 
@@ -20,11 +22,12 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export default function RootNavigator() {
   const { session, profile, loading } = useAuth();
+  const { themeColors } = useAppContext();
 
   if (loading) {
     return (
-      <View style={styles.loading}>
-        <ActivityIndicator size="large" color="#3B82F6" />
+      <View style={[styles.loading, { backgroundColor: themeColors.background }]}>
+        <ActivityIndicator size="large" color={themeColors.accent} />
       </View>
     );
   }
@@ -36,8 +39,8 @@ export default function RootNavigator() {
     <Stack.Navigator
       screenOptions={{
         headerShown: false,
-        headerStyle: { backgroundColor: '#0F172A' },
-        headerTintColor: '#F8FAFC',
+        headerStyle: { backgroundColor: themeColors.card },
+        headerTintColor: themeColors.text,
         headerTitleStyle: { fontWeight: '700' },
       }}
     >
@@ -92,6 +95,11 @@ export default function RootNavigator() {
             options={{ headerShown: false }}
           />
           <Stack.Screen
+            name="IrrigationTimer"
+            component={IrrigationTimerScreen}
+            options={{ headerShown: true, title: 'Irrigation Timer' }}
+          />
+          <Stack.Screen
             name="SettingsScreen"
             component={SettingsScreen}
             options={{ headerShown: true, title: 'Settings' }}
@@ -105,7 +113,6 @@ export default function RootNavigator() {
 const styles = StyleSheet.create({
   loading: {
     flex: 1,
-    backgroundColor: '#0F172A',
     alignItems: 'center',
     justifyContent: 'center',
     padding: 24,

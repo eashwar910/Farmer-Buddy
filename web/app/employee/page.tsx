@@ -47,7 +47,9 @@ export default function EmployeeDashboard() {
   const [activeTab, setActiveTab] = useState<TabKey>('overview');
 
   useEffect(() => {
-    init();
+    let cleanup: (() => void) | undefined;
+    init().then((fn) => { cleanup = fn; });
+    return () => { cleanup?.(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -174,9 +176,9 @@ export default function EmployeeDashboard() {
 
           <div className="flex items-center gap-3">
             {isStreaming && (
-              <div className="hidden sm:flex items-center gap-1.5 bg-fb-red/10 border border-fb-red/30 rounded-full px-3 py-1">
-                <div className="w-2 h-2 rounded-full bg-fb-red animate-pulse" />
-                <span className="text-fb-red text-xs font-semibold">STREAMING</span>
+              <div className="hidden sm:flex items-center gap-1.5 bg-fb-alert/10 border border-fb-alert/30 rounded-full px-3 py-1">
+                <div className="w-2 h-2 rounded-full bg-fb-alert animate-pulse" />
+                <span className="text-fb-alert text-xs font-semibold">STREAMING</span>
               </div>
             )}
             <span className="text-fb-subtext text-sm hidden md:block">
@@ -184,7 +186,7 @@ export default function EmployeeDashboard() {
             </span>
             <button
               onClick={handleSignOut}
-              className="text-fb-red text-xs border border-fb-border hover:border-fb-red/50 rounded-lg px-3 py-1.5 transition-colors"
+              className="text-fb-alert text-xs border border-fb-border hover:border-fb-alert/50 rounded-lg px-3 py-1.5 transition-colors"
             >
               Sign Out
             </button>
@@ -322,19 +324,19 @@ function OverviewTab({
           <div
             className={`rounded-xl border p-5 ${
               isStreaming
-                ? 'bg-fb-red/5 border-fb-red/30'
+                ? 'bg-fb-alert/5 border-fb-alert/30'
                 : 'bg-fb-card border-fb-border'
             }`}
           >
             <div className="flex items-center gap-2 mb-2">
               <div
                 className={`w-2.5 h-2.5 rounded-full ${
-                  isStreaming ? 'bg-fb-red animate-pulse' : 'bg-fb-border'
+                  isStreaming ? 'bg-fb-alert animate-pulse' : 'bg-fb-border'
                 }`}
               />
               <span
                 className={`text-xs font-bold uppercase tracking-wider ${
-                  isStreaming ? 'text-fb-red' : 'text-fb-subtext'
+                  isStreaming ? 'text-fb-alert' : 'text-fb-subtext'
                 }`}
               >
                 {isStreaming ? 'Streaming Live' : 'Not Streaming'}

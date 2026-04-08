@@ -151,9 +151,9 @@ export default function WeatherWidget() {
 
   return (
     <div
-      className="w-full rounded-2xl border border-white/10 overflow-hidden relative"
+      className="w-full rounded-2xl border border-fb-border overflow-hidden relative"
       style={{
-        background: 'linear-gradient(135deg, rgba(13,27,42,0.95) 0%, rgba(26,45,63,0.95) 100%)',
+        background: 'linear-gradient(135deg, rgba(22,24,20,0.98) 0%, rgba(32,36,28,0.98) 100%)',
         backdropFilter: 'blur(20px)',
       }}
     >
@@ -167,7 +167,7 @@ export default function WeatherWidget() {
             </span>
           </div>
           <div className="text-right">
-            <div className="text-2xl font-bold text-white tracking-widest">
+            <div className="text-2xl font-bold text-fb-text tracking-widest">
               {clockTime}
             </div>
             <div className="text-xs text-fb-subtext mt-0.5">{dayDate}</div>
@@ -176,7 +176,7 @@ export default function WeatherWidget() {
 
         {/* Temperature */}
         <div>
-          <div className="text-5xl font-bold text-white leading-none">
+          <div className="text-5xl font-bold text-fb-text leading-none">
             {weather ? `${weather.temp}°` : '--°'}
           </div>
           <div className="text-fb-subtext text-sm mt-1">
@@ -197,9 +197,9 @@ export default function WeatherWidget() {
 
 function Pill({ label, value, icon }: { label: string; value: string; icon: string }) {
   return (
-    <div className="flex items-center gap-1.5 bg-white/10 rounded-full px-3 py-1.5 text-xs">
+    <div className="flex items-center gap-1.5 bg-fb-elevated rounded-full px-3 py-1.5 text-xs border border-fb-border">
       <span>{icon}</span>
-      <span className="font-semibold text-white">{value}</span>
+      <span className="font-semibold text-fb-text">{value}</span>
       <span className="text-fb-subtext">{label}</span>
     </div>
   );

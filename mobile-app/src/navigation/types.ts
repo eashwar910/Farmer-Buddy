@@ -20,6 +20,7 @@ export type RootStackParamList = {
   LeafDetection: undefined;
   IoTSensorScreen: undefined;
   AgronomistChat: undefined;
+  IrrigationTimer: undefined;
   SettingsScreen: undefined;
   ManagerTabs: undefined;
   EmployeeTabs: undefined;

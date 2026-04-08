@@ -76,8 +76,8 @@ export default function LiveStreamGrid({ shiftId }: LiveStreamGridProps) {
 
   if (error) {
     return (
-      <div className="flex flex-col items-center justify-center h-48 bg-fb-red/5 rounded-xl border border-fb-red/20">
-        <span className="text-fb-red text-sm">⚠️ {error}</span>
+      <div className="flex flex-col items-center justify-center h-48 bg-fb-alert/5 rounded-xl border border-fb-alert/20">
+        <span className="text-fb-alert text-sm">⚠️ {error}</span>
         <button
           onClick={() => fetchToken(shiftId)}
           className="mt-3 text-xs text-fb-accent hover:underline"

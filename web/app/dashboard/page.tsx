@@ -53,7 +53,9 @@ export default function ManagerDashboard() {
   const [activeTab, setActiveTab] = useState<TabKey>('overview');
 
   useEffect(() => {
-    init();
+    let cleanup: (() => void) | undefined;
+    init().then((fn) => { cleanup = fn; });
+    return () => { cleanup?.(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -185,7 +187,7 @@ export default function ManagerDashboard() {
             </span>
             <button
               onClick={handleSignOut}
-              className="text-fb-red text-xs border border-fb-border hover:border-fb-red/50 rounded-lg px-3 py-1.5 transition-colors"
+              className="text-fb-alert text-xs border border-fb-border hover:border-fb-alert/50 rounded-lg px-3 py-1.5 transition-colors"
             >
               Sign Out
             </button>

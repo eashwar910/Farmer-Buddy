@@ -113,8 +113,8 @@ export default function LeafDetection() {
 
   const statusColor = {
     Healthy: 'text-fb-accent border-fb-accent/30 bg-fb-accent/10',
-    Diseased: 'text-fb-red border-fb-red/30 bg-fb-red/10',
-    Uncertain: 'text-fb-yellow border-fb-yellow/30 bg-fb-yellow/10',
+    Diseased: 'text-fb-alert border-fb-alert/30 bg-fb-alert/10',
+    Uncertain: 'text-fb-warn border-fb-warn/30 bg-fb-warn/10',
   };
 
   return (
@@ -172,8 +172,8 @@ export default function LeafDetection() {
 
       {/* Error */}
       {error && (
-        <div className="bg-fb-red/10 border border-fb-red/30 rounded-xl p-4">
-          <p className="text-fb-red text-sm">{error}</p>
+        <div className="bg-fb-alert/10 border border-fb-alert/30 rounded-xl p-4">
+          <p className="text-fb-alert text-sm">{error}</p>
         </div>
       )}
 

@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Animated } from 'react-native';
-import { BlurView } from 'expo-blur';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -31,30 +30,11 @@ interface WeatherData {
   locationName: string;
 }
 
-const DAYS   = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-
 export default function WeatherWidget() {
   const { themeColors } = useAppContext();
-  const [weather, setWeather]   = useState<WeatherData | null>(null);
-  const [loading, setLoading]   = useState(true);
-  const [clockTime, setClockTime] = useState('');
-  const [dayDate, setDayDate]   = useState('');
+  const [weather, setWeather] = useState<WeatherData | null>(null);
+  const [loading, setLoading] = useState(true);
   const shimmer = useRef(new Animated.Value(0.3)).current;
-
-  // Live clock
-  useEffect(() => {
-    const tick = () => {
-      const now = new Date();
-      const hh = String(now.getHours()).padStart(2, '0');
-      const mm = String(now.getMinutes()).padStart(2, '0');
-      setClockTime(`${hh}:${mm}`);
-      setDayDate(`${DAYS[now.getDay()]}, ${now.getDate()} ${MONTHS[now.getMonth()]}`);
-    };
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, []);
 
   // Shimmer while loading
   useEffect(() => {
@@ -69,7 +49,7 @@ export default function WeatherWidget() {
     return () => anim.stop();
   }, [loading]);
 
-  // Weather fetch with cache
+  // Weather fetch with 30-min cache
   useEffect(() => {
     (async () => {
       try {
@@ -142,18 +122,10 @@ export default function WeatherWidget() {
   if (loading) {
     return (
       <View style={styles.container}>
-        <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
-        <View style={styles.overlay} />
-        <Animated.View style={[styles.skeletonWrap, { opacity: shimmer }]}>
-          <View style={styles.skeletonLeft}>
-            <View style={[styles.skeletonBox, { width: 110, height: 13, marginBottom: 18 }]} />
-            <View style={[styles.skeletonBox, { width: 90,  height: 50, marginBottom: 6  }]} />
-            <View style={[styles.skeletonBox, { width: 70,  height: 13               }]} />
-          </View>
-          <View style={styles.skeletonRight}>
-            <View style={[styles.skeletonBox, { width: 72, height: 28, marginBottom: 8 }]} />
-            <View style={[styles.skeletonBox, { width: 120, height: 12               }]} />
-          </View>
+        <Animated.View style={[styles.skeletonRow, { opacity: shimmer }]}>
+          <View style={[styles.skeletonBox, { width: 80,  height: 11 }]} />
+          <View style={[styles.skeletonBox, { width: 52,  height: 20 }]} />
+          <View style={[styles.skeletonBox, { width: 110, height: 11 }]} />
         </Animated.View>
       </View>
     );
@@ -168,47 +140,35 @@ export default function WeatherWidget() {
 
   return (
     <View style={styles.container}>
-      <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
-      <View style={styles.overlay} />
 
-      <View style={styles.content}>
-        {/* Top row: location + clock */}
-        <View style={styles.topRow}>
-          <View style={styles.locationRow}>
-            <MaterialCommunityIcons name="map-marker" size={13} color={themeColors.accent} />
-            <Text style={styles.locationText} numberOfLines={1}>{locName}</Text>
-          </View>
-          <View style={styles.clockWrap}>
-            <Text style={styles.clockText}>{clockTime}</Text>
-            <Text style={styles.dayDateText}>{dayDate}</Text>
-          </View>
+      {/* Left — location */}
+      <View style={styles.locationSection}>
+        <MaterialCommunityIcons name="map-marker" size={12} color={themeColors.emphasis} />
+        <Text style={styles.locationText} numberOfLines={1}>{locName}</Text>
+      </View>
+
+      {/* Center — temperature + condition */}
+      <View style={styles.tempSection}>
+        <Text style={styles.tempText}>{temp}</Text>
+        <Text style={styles.conditionText} numberOfLines={1}>{condition}</Text>
+      </View>
+
+      {/* Right — humidity · wind · UV */}
+      <View style={styles.statsSection}>
+        <View style={styles.stat}>
+          <MaterialCommunityIcons name="water-percent" size={11} color={themeColors.subtext} />
+          <Text style={styles.statValue}>{humidity}</Text>
         </View>
-
-        {/* Temperature + condition */}
-        <View style={styles.tempSection}>
-          <Text style={styles.tempText}>{temp}</Text>
-          <Text style={styles.conditionText}>{condition}</Text>
+        <View style={styles.stat}>
+          <MaterialCommunityIcons name="weather-windy" size={11} color={themeColors.subtext} />
+          <Text style={styles.statValue}>{wind}</Text>
         </View>
-
-        {/* Bottom pills */}
-        <View style={styles.pillsRow}>
-          <View style={styles.pill}>
-            <MaterialCommunityIcons name="water-percent" size={12} color="rgba(255,255,255,0.6)" />
-            <Text style={styles.pillValue}>{humidity}</Text>
-            <Text style={styles.pillLabel}>Humidity</Text>
-          </View>
-          <View style={styles.pill}>
-            <MaterialCommunityIcons name="weather-windy" size={12} color="rgba(255,255,255,0.6)" />
-            <Text style={styles.pillValue}>{wind}</Text>
-            <Text style={styles.pillLabel}>Wind</Text>
-          </View>
-          <View style={styles.pill}>
-            <MaterialCommunityIcons name="weather-sunny-alert" size={12} color="rgba(255,255,255,0.6)" />
-            <Text style={styles.pillValue}>{uv}</Text>
-            <Text style={styles.pillLabel}>UV Index</Text>
-          </View>
+        <View style={styles.stat}>
+          <Text style={styles.statLabel}>UV</Text>
+          <Text style={styles.statValue}>{uv}</Text>
         </View>
       </View>
+
     </View>
   );
 }
@@ -216,105 +176,89 @@ export default function WeatherWidget() {
 const getStyles = (themeColors: any) => StyleSheet.create({
   container: {
     width: '100%',
-    height: 168,
-    borderRadius: 20,
-    overflow: 'hidden',
-    marginBottom: 24,
+    backgroundColor: themeColors.card,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
-  },
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(255,255,255,0.07)',
-  },
-  content: {
-    flex: 1,
-    padding: 16,
-    justifyContent: 'space-between',
-  },
-  topRow: {
+    borderColor: themeColors.border,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    marginBottom: 20,
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 3,
   },
-  locationRow: {
+
+  // Left
+  locationSection: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+    marginRight: 8,
   },
   locationText: {
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.55)',
-    fontWeight: '500',
-    maxWidth: 170,
-  },
-  clockWrap: {
-    alignItems: 'flex-end',
-  },
-  clockText: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#ffffff',
-    letterSpacing: 1,
-  },
-  dayDateText: {
     fontSize: 12,
-    color: 'rgba(255,255,255,0.55)',
-    marginTop: 2,
-    textAlign: 'right',
+    color: themeColors.subtext,
+    flex: 1,
+    fontFamily: 'Satoshi-Regular',
   },
+
+  // Center
   tempSection: {
-    flexDirection: 'column',
+    alignItems: 'center',
+    marginHorizontal: 8,
   },
   tempText: {
-    fontSize: 52,
+    fontSize: 22,
     fontWeight: '700',
-    color: '#ffffff',
-    lineHeight: 54,
+    color: themeColors.text,
+    lineHeight: 26,
+    fontFamily: 'CabinetGrotesk-Bold',
   },
   conditionText: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.7)',
-    marginTop: 2,
-  },
-  pillsRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  pill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(255,255,255,0.10)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 20,
-  },
-  pillValue: {
-    fontSize: 12,
-    color: '#ffffff',
-    fontWeight: '600',
-  },
-  pillLabel: {
     fontSize: 11,
-    color: 'rgba(255,255,255,0.55)',
+    color: themeColors.subtext,
+    maxWidth: 96,
+    textAlign: 'center',
+    fontFamily: 'Satoshi-Regular',
   },
-  // Skeleton
-  skeletonWrap: {
-    flex: 1,
+
+  // Right — stat group
+  statsSection: {
+    flexDirection: 'row',
+    gap: 10,
+    marginLeft: 8,
+  },
+  stat: {
+    alignItems: 'center',
+    gap: 2,
+  },
+  statValue: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: themeColors.text,
+    fontFamily: 'Satoshi-Regular',
+  },
+  statLabel: {
+    fontSize: 10,
+    color: themeColors.subtext,
+    fontFamily: 'Satoshi-Regular',
+  },
+
+  // Loading skeleton
+  skeletonRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    padding: 16,
-  },
-  skeletonLeft: {
-    justifyContent: 'flex-start',
-  },
-  skeletonRight: {
-    alignItems: 'flex-end',
+    alignItems: 'center',
+    width: '100%',
   },
   skeletonBox: {
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    borderRadius: 6,
+    backgroundColor: themeColors.border,
+    borderRadius: 4,
   },
 });

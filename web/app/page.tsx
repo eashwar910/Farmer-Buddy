@@ -108,8 +108,8 @@ export default function LoginPage() {
             </div>
 
             {error && (
-              <div className="bg-fb-red/10 border border-fb-red/30 rounded-xl px-4 py-3">
-                <p className="text-fb-red text-sm">{error}</p>
+              <div className="bg-fb-alert/10 border border-fb-alert/30 rounded-xl px-4 py-3">
+                <p className="text-fb-alert text-sm">{error}</p>
               </div>
             )}
 

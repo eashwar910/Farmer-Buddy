@@ -167,7 +167,7 @@ function SummaryCard({
       Processing…
     </span>
   ) : isFailed ? (
-    <span className="text-xs text-fb-red bg-fb-red/10 border border-fb-red/20 rounded-full px-2 py-0.5">
+    <span className="text-xs text-fb-alert bg-fb-alert/10 border border-fb-alert/20 rounded-full px-2 py-0.5">
       Failed
     </span>
   ) : (
@@ -177,7 +177,7 @@ function SummaryCard({
   );
 
   return (
-    <div className={`bg-fb-card border rounded-xl overflow-hidden ${isFailed ? 'border-fb-red/30 opacity-70' : 'border-fb-border'}`}>
+    <div className={`bg-fb-card border rounded-xl overflow-hidden ${isFailed ? 'border-fb-alert/30 opacity-70' : 'border-fb-border'}`}>
       {/* Header */}
       <button
         onClick={isCompleted ? onToggle : undefined}
@@ -187,7 +187,7 @@ function SummaryCard({
           <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
             isCompleted ? 'bg-fb-accent/15 border border-fb-accent/30' :
             isProcessing ? 'bg-amber-400/10 border border-amber-400/20' :
-            isFailed ? 'bg-fb-red/10 border border-fb-red/20' :
+            isFailed ? 'bg-fb-alert/10 border border-fb-alert/20' :
             'bg-fb-border/30 border border-fb-border'
           }`}>
             {isProcessing ? (
@@ -245,7 +245,7 @@ function SummaryCard({
             <Section title="Notable Events" icon="⚠️">
               <div className="space-y-2">
                 {parsed.notable_events.map((ev, i) => (
-                  <div key={i} className="bg-fb-yellow/5 border border-fb-yellow/20 rounded-lg p-3 text-sm">
+                  <div key={i} className="bg-fb-warn/5 border border-fb-warn/20 rounded-lg p-3 text-sm">
                     <p className="text-fb-text">{ev.description}</p>
                     {ev.significance && (
                       <p className="text-fb-subtext text-xs mt-1">{ev.significance}</p>
@@ -261,7 +261,7 @@ function SummaryCard({
               <div className="space-y-2">
                 {parsed.safety_compliance.concerns?.map((c, i) => (
                   <div key={i} className="flex gap-2 text-sm">
-                    <span className="text-fb-red mt-0.5">✕</span>
+                    <span className="text-fb-alert mt-0.5">✕</span>
                     <span className="text-fb-subtext">{c}</span>
                   </div>
                 ))}

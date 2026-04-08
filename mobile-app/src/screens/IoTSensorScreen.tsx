@@ -295,16 +295,28 @@ Next Steps:
 [bullet list of actions, one line each]
 
 - Be direct and practical. No greetings, no filler sentences. Maximum 150 words total.
-- Do not use markdown such as ###, **, or --. Use plain text only.`;
+- Do not use markdown such as ###, **, or --. Use plain text only.
+- At the very end of your response, on its own line, include exactly: FARM_HEALTH_SCORE: [a single integer from 0 to 100 reflecting overall farm health based on the readings]`;
 
     try {
       const responseText = await analyzeFarmData(prompt);
-      setAnalysisResult(responseText);
-      // Auto-save the report
+
+      // Parse and persist the health score
+      const scoreMatch = responseText.match(/FARM_HEALTH_SCORE:\s*(\d+)/);
+      if (scoreMatch) {
+        const score = Math.min(100, Math.max(0, parseInt(scoreMatch[1], 10)));
+        await AsyncStorage.setItem('farm_health_score', score.toString());
+      }
+
+      // Strip the score line from the displayed text
+      const displayText = responseText.replace(/\nFARM_HEALTH_SCORE:\s*\d+\s*$/m, '').trim();
+
+      setAnalysisResult(displayText);
+      // Auto-save the report (without the score line)
       const newReport: Report = {
         id: Date.now().toString(),
         timestamp: Date.now(),
-        content: responseText
+        content: displayText
       };
       saveReports([newReport, ...reports]);
     } catch (e: any) {
@@ -490,7 +502,7 @@ Next Steps:
             {analyzing ? (
                <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.analyzeBtnText}>✨ Analyze with Gemini</Text>
+              <Text style={styles.analyzeBtnText}>Analyze with Farmer Buddy</Text>
             )}
           </TouchableOpacity>
           {sensors.length === 0 && (

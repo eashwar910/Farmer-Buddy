@@ -11,17 +11,22 @@ const config: Config = {
         sans: ['Sansation', 'system-ui', 'sans-serif'],
       },
       colors: {
-        // Farmer Buddy dark palette
+        // Farmer Buddy dark palette — mirrors mobile themes.ts dark tokens
         fb: {
-          bg: '#0d1b2a',
-          card: '#1a2d3f',
-          border: '#2a3f52',
-          text: '#ffffff',
-          subtext: '#8fa8bb',
-          accent: '#4ade80',
-          red: '#EF4444',
-          yellow: '#F59E0B',
-          blue: '#3B82F6',
+          bg: '#161814',        // background
+          card: '#20241C',      // card / surface
+          elevated: '#2A3024',  // modals / raised cards
+          border: '#3A4232',    // borders / dividers
+          text: '#DCDAD0',      // primary text
+          subtext: '#94988A',   // muted / secondary text
+          faint: '#585E4E',     // section labels / faint UI
+          accent: '#4A7838',    // buttons / active states
+          accentHover: '#3A622C', // hover / pressed accent
+          emphasis: '#8EA578',  // icons / secondary accent labels
+          ok: '#60A048',        // success / active status
+          warn: '#C49430',      // warning status
+          alert: '#BE5040',     // error / alert status
+          blue: '#3B82F6',      // informational (kept for links/info badges)
         },
       },
     },
