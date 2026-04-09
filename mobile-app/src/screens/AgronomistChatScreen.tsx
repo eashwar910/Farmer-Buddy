@@ -768,7 +768,7 @@ const getStyles = (themeColors: any) =>
       justifyContent: 'center', alignItems: 'center', marginRight: 8,
     },
     messageBubble: { maxWidth: '80%', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 20 },
-    userBubble: { backgroundColor: '#3B82F6', borderBottomRightRadius: 4 },
+    userBubble: { backgroundColor: '#4A7838', borderBottomRightRadius: 4 },
     botBubble: { backgroundColor: '#1F2937', borderBottomLeftRadius: 4, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)' },
     messageText: { fontSize: 15, lineHeight: 22 },
     userText: { color: '#fff' },

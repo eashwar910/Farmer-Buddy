@@ -102,28 +102,49 @@ serve(async (req) => {
       weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
     });
 
-    // ── 6. Fetch all completed recordings with summaries ──────────────────────
-    const { data: recordings, error: recError } = await supabase
+    // ── 6. Fetch completed recording sessions, then their chunks ─────────────
+    const { data: recordingSessions, error: sessError } = await supabase
       .from('recordings')
-      .select('id, chunk_index, started_at, ended_at, summary, processing_status')
+      .select('id, started_at')
       .eq('shift_id', shiftId)
       .eq('employee_id', employeeId)
-      .eq('processing_status', 'completed')
-      .order('chunk_index', { ascending: true });
+      .eq('status', 'completed')
+      .order('started_at', { ascending: true });
 
-    if (recError) {
+    if (sessError) {
       return new Response(JSON.stringify({ error: 'Failed to fetch recordings' }), {
         status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    if (!recordings || recordings.length === 0) {
-      return new Response(JSON.stringify({ error: 'No completed summaries found for this employee' }), {
+    if (!recordingSessions || recordingSessions.length === 0) {
+      return new Response(JSON.stringify({ error: 'No completed recordings found for this employee' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    console.log(`Generating report for ${employeeName}: ${recordings.length} chunks`);
+    const recordingIds = (recordingSessions as any[]).map((r) => r.id);
+
+    const { data: recordings, error: recError } = await supabase
+      .from('recording_chunks')
+      .select('id, recording_id, chunk_index, started_at, ended_at, summary, processing_status')
+      .in('recording_id', recordingIds)
+      .eq('processing_status', 'completed')
+      .order('started_at', { ascending: true });
+
+    if (recError) {
+      return new Response(JSON.stringify({ error: 'Failed to fetch recording chunks' }), {
+        status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (!recordings || recordings.length === 0) {
+      return new Response(JSON.stringify({ error: 'No completed chunk summaries found for this employee. Chunks may still be processing.' }), {
+        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    console.log(`Generating report for ${employeeName}: ${recordings.length} chunks from ${recordingSessions.length} session(s)`);
 
     // ── 7. Build summary context ──────────────────────────────────────────────
     const summaryContext = (recordings as any[]).map((rec, idx) => {

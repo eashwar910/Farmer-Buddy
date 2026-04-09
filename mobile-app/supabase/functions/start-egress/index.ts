@@ -56,7 +56,7 @@ serve(async (req)=>{
       });
     }
     // ── 2. Parse body ────────────────────────────────────────────────────────
-    const { shiftId } = await req.json();
+    const { shiftId, participantIdentity } = await req.json();
     if (!shiftId) {
       return new Response(JSON.stringify({
         error: 'shiftId is required'
@@ -129,6 +129,8 @@ serve(async (req)=>{
     const adminJwt = await adminToken.toJwt();
     const roomName = `shift-${shiftId}`;
     const participantId = user.id;
+    // Use the identity the employee actually joined the room with (may have platform suffix e.g. "uuid-mobile")
+    const egressIdentity = participantIdentity ?? participantId;
     // Use directory-style path: {shiftId}/{employeeId}/chunk_
     const filenamePrefix = `${shiftId}/${participantId}/chunk_`;
     const playlistName   = `${shiftId}/${participantId}/playlist.m3u8`;
@@ -166,7 +168,7 @@ serve(async (req)=>{
     // egress per room, which blocks concurrent multi-employee shifts.
     const egressPayload = {
       room_name: roomName,
-      identity:  participantId,
+      identity:  egressIdentity,
       segment_outputs: [
         {
           filename_prefix: filenamePrefix,

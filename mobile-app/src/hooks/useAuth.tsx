@@ -44,25 +44,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session }, error }) => {
-      if (error?.message?.includes('Refresh Token Not Found') || error?.message?.includes('Invalid Refresh Token')) {
-        // Stale session in AsyncStorage — wipe it and force re-login
-        supabase.auth.signOut().finally(() => {
-          setSession(null);
-          setUser(null);
-          setProfile(null);
-          setLoading(false);
-        });
-        return;
-      }
-      setSession(session);
-      setUser(session?.user ?? null);
-    });
-
+    // onAuthStateChange must be registered BEFORE getSession() so that the
+    // INITIAL_SESSION event is never missed.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        // TOKEN_REFRESH_FAILED fires when the stored refresh token is invalid
-        if (event === 'TOKEN_REFRESHED' && !session) {
+        // Supabase fires SIGNED_OUT after a failed auto-refresh (invalid token).
+        // Wipe local storage so the client won't attempt another refresh next launch.
+        if (event === 'SIGNED_OUT') {
+          supabase.auth.signOut({ scope: 'local' }).catch(() => {});
           setSession(null);
           setUser(null);
           setProfile(null);
@@ -76,8 +65,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (session?.user) {
           // Only hold the loading gate for events that require re-navigating the stack.
           // TOKEN_REFRESHED is a background event — setting loading=true here would
-          // unmount the Stack.Navigator, reset navigation state, and kick the employee
-          // back to HomeScreen (losing their place mid-shift).
+          // unmount the Stack.Navigator and kick users back to HomeScreen mid-session.
           if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
             setLoading(true);
           }
@@ -86,12 +74,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } else {
           setProfile(null);
         }
-        // Only release the loading gate for events that set it, or on sign-out.
+
         if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || !session) {
           setLoading(false);
         }
       }
     );
+
+    // Trigger the INITIAL_SESSION event via getSession.
+    // If the stored token is invalid the client will fire SIGNED_OUT above.
+    supabase.auth.getSession().catch(() => {
+      // Suppress any uncaught promise rejection from a bad stored token.
+      setSession(null);
+      setUser(null);
+      setProfile(null);
+      setLoading(false);
+    });
 
     return () => subscription.unsubscribe();
   }, []);

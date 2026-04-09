@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { supabase } from '../services/supabase';
 import RecordingSummaryModal from '../components/RecordingSummaryModal';
+import { useAppContext } from '../context/AppContext';
 
 interface Recording {
   id: string;
@@ -40,10 +41,12 @@ interface RecordingsListScreenProps {
 
 export default function RecordingsListScreen({ route, navigation }: RecordingsListScreenProps) {
   const { shiftId, employeeId, employeeName, recordingId } = route.params;
+  const { themeColors } = useAppContext();
   const [recordings, setRecordings] = useState<Recording[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedRecording, setSelectedRecording] = useState<Recording | null>(null);
   const [showSummaryModal, setShowSummaryModal] = useState(false);
+  const styles = getStyles(themeColors);
 
   useEffect(() => {
     navigation.setOptions({ title: `${employeeName} — Recordings` });
@@ -217,7 +220,7 @@ export default function RecordingsListScreen({ route, navigation }: RecordingsLi
             ) : item.processing_status === 'completed' ? (
               <Text style={styles.summaryButtonText}>🤖 View AI Summary</Text>
             ) : (
-              <Text style={[styles.summaryButtonText, { color: '#64748B' }]}>⏳ Pending...</Text>
+              <Text style={[styles.summaryButtonText, { color: themeColors.subtext }]}>⏳ Pending...</Text>
             )}
           </TouchableOpacity>
         )}
@@ -245,7 +248,7 @@ export default function RecordingsListScreen({ route, navigation }: RecordingsLi
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#3B82F6" />
+        <ActivityIndicator size="large" color={themeColors.accent} />
       </View>
     );
   }
@@ -292,14 +295,14 @@ export default function RecordingsListScreen({ route, navigation }: RecordingsLi
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (themeColors: any) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0F172A',
+    backgroundColor: themeColors.background,
   },
   centered: {
     flex: 1,
-    backgroundColor: '#0F172A',
+    backgroundColor: themeColors.background,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -311,12 +314,12 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#F8FAFC',
+    color: themeColors.text,
     marginBottom: 2,
   },
   headerSubtitle: {
     fontSize: 13,
-    color: '#64748B',
+    color: themeColors.subtext,
     marginBottom: 8,
   },
   list: {
@@ -324,19 +327,19 @@ const styles = StyleSheet.create({
     paddingBottom: 100,
   },
   card: {
-    backgroundColor: '#1E293B',
+    backgroundColor: themeColors.card,
     borderRadius: 12,
     padding: 14,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: themeColors.border,
   },
   cardLive: {
     borderColor: '#EF4444',
     backgroundColor: '#1F0A0A',
   },
   cardFailed: {
-    borderColor: '#475569',
+    borderColor: themeColors.border,
     opacity: 0.7,
   },
   cardHeader: {
@@ -349,7 +352,7 @@ const styles = StyleSheet.create({
   chunkNumber: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#F8FAFC',
+    color: themeColors.text,
   },
   statusBadge: {
     flexDirection: 'row',
@@ -380,8 +383,8 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   statusLive:   { color: '#EF4444' },
-  statusFailed: { color: '#64748B' },
-  statusDone:   { color: '#22C55E' },
+  statusFailed: { color: themeColors.subtext },
+  statusDone:   { color: themeColors.statusOk },
   timeRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -389,16 +392,16 @@ const styles = StyleSheet.create({
   },
   timeLabel: {
     fontSize: 12,
-    color: '#64748B',
+    color: themeColors.subtext,
   },
   timeValue: {
     fontSize: 12,
-    color: '#CBD5E1',
+    color: themeColors.text,
     fontWeight: '500',
   },
   summaryButton: {
     marginTop: 10,
-    backgroundColor: '#1E293B',
+    backgroundColor: themeColors.card,
     borderRadius: 8,
     padding: 10,
     alignItems: 'center',
@@ -406,35 +409,35 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 6,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: themeColors.border,
   },
   summaryButtonReady: {
-    backgroundColor: '#1E3A8A',
-    borderColor: '#3B82F6',
+    backgroundColor: themeColors.elevatedCard,
+    borderColor: themeColors.accent,
   },
   summaryButtonProcessing: {
     backgroundColor: '#1F1C0A',
     borderColor: '#F59E0B',
   },
   summaryButtonPending: {
-    backgroundColor: '#1E293B',
-    borderColor: '#334155',
+    backgroundColor: themeColors.card,
+    borderColor: themeColors.border,
     opacity: 0.65,
   },
   summaryButtonText: {
-    color: '#E2E8F0',
+    color: themeColors.text,
     fontWeight: '600',
     fontSize: 13,
   },
   openButton: {
     marginTop: 6,
-    backgroundColor: '#3B82F6',
+    backgroundColor: themeColors.accent,
     borderRadius: 8,
     padding: 10,
     alignItems: 'center',
   },
   openButtonText: {
-    color: '#fff',
+    color: themeColors.textOnAccent,
     fontWeight: '600',
     fontSize: 13,
   },
@@ -461,12 +464,12 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#F8FAFC',
+    color: themeColors.text,
     marginBottom: 8,
   },
   emptySubtext: {
     fontSize: 14,
-    color: '#64748B',
+    color: themeColors.subtext,
     textAlign: 'center',
     lineHeight: 20,
   },

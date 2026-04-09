@@ -330,8 +330,8 @@ Next Steps:
   const getCategoryColor = (category: string) => {
     switch(category) {
       case 'soil': return '#D97706'; // Amber/Brown
-      case 'water': return '#3B82F6'; // Blue
-      case 'air': return '#0EA5E9'; // Sky
+      case 'water': return '#4A7838'; // Green (theme accent)
+      case 'air': return '#8EA578'; // Olive (theme emphasis)
       default: return themeColors.subtext; // Slate
     }
   };

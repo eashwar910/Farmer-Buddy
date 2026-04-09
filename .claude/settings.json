@@ -10,7 +10,12 @@
       "Bash(git push:*)",
       "Bash(xargs ls:*)",
       "Bash(node -e \"const ts = require\\('typescript'\\); console.log\\(ts.version\\)\")",
-      "Bash(grep -E \"^/Users.*/\\(App|index\\)\\\\.tsx$\")"
+      "Bash(grep -E \"^/Users.*/\\(App|index\\)\\\\.tsx$\")",
+      "Bash(vercel --prod)",
+      "Bash(find /Users/eashwarsiddha/Documents/UoNM/Year2/Sem2/SEGP_2/mobile-app/src -type f \\\\\\( -name \"*.ts\" -o -name \"*.tsx\" -o -name \"*.js\" -o -name \"*.jsx\" \\\\\\) -exec grep -l \"themeColors\\\\|AppContext\" {} \\\\;)"
+    ],
+    "additionalDirectories": [
+      "/Users/eashwarsiddha/.claude/projects/-Users-eashwarsiddha-Documents-UoNM-Year2-Sem2-SEGP_2/memory"
     ]
   }
 }

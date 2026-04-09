@@ -34,6 +34,7 @@ export default function EmployeeStreaming({ shiftId, employeeName, onEgressStart
   const [isStopping, setIsStopping] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [egressId, setEgressId] = useState<string | null>(null);
+  const [participantIdentity, setParticipantIdentity] = useState<string | null>(null);
 
   const handleStartStreaming = useCallback(async () => {
     if (isConnecting) return;
@@ -55,6 +56,7 @@ export default function EmployeeStreaming({ shiftId, employeeName, onEgressStart
       // ── 3. Fetch LiveKit token from Supabase Edge Function ───────────────
       const data = await fetchLiveKitToken(shiftId);
       setToken(data.token);
+      setParticipantIdentity(data.identity);
       setIsStreaming(true);
     } catch (err: any) {
       const msg = err.message || 'Failed to connect';
@@ -159,6 +161,7 @@ export default function EmployeeStreaming({ shiftId, employeeName, onEgressStart
       >
         <StreamingView
           shiftId={shiftId}
+          participantIdentity={participantIdentity}
           onStop={handleStopStreaming}
           egressId={egressId}
           onEgressStarted={(id) => {
@@ -173,12 +176,13 @@ export default function EmployeeStreaming({ shiftId, employeeName, onEgressStart
 
 interface StreamingViewProps {
   shiftId: string;
+  participantIdentity: string | null;
   onStop: () => void;
   egressId: string | null;
   onEgressStarted: (id: string) => void;
 }
 
-function StreamingView({ shiftId, onStop, egressId, onEgressStarted }: StreamingViewProps) {
+function StreamingView({ shiftId, participantIdentity, onStop, egressId, onEgressStarted }: StreamingViewProps) {
   const room = useRoomContext();
   const [connectionState, setConnectionState] = useState<string>('connecting');
   const egressStartedRef = useRef(false);
@@ -210,7 +214,7 @@ function StreamingView({ shiftId, onStop, egressId, onEgressStarted }: Streaming
         console.log('Session token found, invoking start-egress...');
 
         const { data, error } = await supabase.functions.invoke('start-egress', {
-          body: { shiftId },
+          body: { shiftId, participantIdentity },
           headers: {
             Authorization: `Bearer ${session.access_token}`,
           },

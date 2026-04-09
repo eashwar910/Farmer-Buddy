@@ -49,7 +49,7 @@ const ROLE_OPTIONS: RoleOption[] = [
     label: 'Manager',
     description: 'Monitor employee streams, view reports, and manage shifts',
     icon: 'account-tie',
-    colors: ['#1e40af', '#172554'],
+    colors: ['#2A3024', '#1A1E16'],
   },
 ];
 
