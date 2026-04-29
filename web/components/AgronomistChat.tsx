@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+
 import ReactMarkdown from 'react-markdown';
 
 interface Message {
@@ -152,7 +153,6 @@ export default function AgronomistChat() {
               }`}
             >
               {msg.imageUrl && (
-                // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={msg.imageUrl}
                   alt="Attached"
@@ -187,7 +187,6 @@ export default function AgronomistChat() {
       {/* Image preview */}
       {imagePreview && (
         <div className="px-4 pb-2 flex items-center gap-2">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={imagePreview}
             alt="Preview"

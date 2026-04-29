@@ -11,20 +11,20 @@ import {
   SafeAreaView,
   Linking,
 } from 'react-native';
+
+import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
+
 import { useAuth } from '../hooks/useAuth';
 import { useShift } from '../hooks/useShift';
 import { usePresence } from '../hooks/usePresence';
 import EmployeeStreaming from '../components/EmployeeStreaming';
 import { useAppContext } from '../context/AppContext';
+import { formatTime } from '../utils/format';
+import { EmployeeTabParamList } from '../navigation/types';
 
-function formatTime(totalSeconds: number): string {
-  const h = Math.floor(totalSeconds / 3600);
-  const m = Math.floor((totalSeconds % 3600) / 60);
-  const s = totalSeconds % 60;
-  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-}
+type Props = BottomTabScreenProps<EmployeeTabParamList, 'Dashboard'>;
 
-export default function EmployeeDashboardScreen({ navigation }: any) {
+export default function EmployeeDashboardScreen({ navigation }: Props) {
   const { profile, signOut } = useAuth();
   const { activeShift, elapsedSeconds } = useShift();
   const { themeColors, t } = useAppContext();

@@ -1,21 +1,27 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, TouchableOpacity, StyleSheet,
   ScrollView, Animated,
 } from 'react-native';
+
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useAuth } from '../hooks/useAuth';
-import { useAppContext } from '../context/AppContext';
+import { useFocusEffect } from '@react-navigation/native';
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+
+import { useAuth } from '../hooks/useAuth';
+import { useAppContext } from '../context/AppContext';
 import WeatherWidget from '../components/WeatherWidget';
+import { RootStackParamList } from '../navigation/types';
+
+type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
 
 const DAYS   = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const TILE_HEIGHT = 148;
 
-export default function HomeScreen({ navigation }: any) {
+export default function HomeScreen({ navigation }: Props) {
   const { profile } = useAuth();
   const { themeColors, t } = useAppContext();
   const [stats, setStats] = useState({

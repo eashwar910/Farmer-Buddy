@@ -8,13 +8,16 @@ import {
   ActivityIndicator,
   RefreshControl,
 } from 'react-native';
+
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+
 import { supabase } from '../services/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { useAppContext } from '../context/AppContext';
 import { RootStackParamList } from '../navigation/types';
+import { formatDuration } from '../utils/format';
 
 type NavProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -44,16 +47,6 @@ function formatTime(iso: string): string {
     hour: '2-digit',
     minute: '2-digit',
   });
-}
-
-function formatDuration(startIso: string, endIso: string | null): string {
-  if (!endIso) return 'Ongoing';
-  const ms = new Date(endIso).getTime() - new Date(startIso).getTime();
-  const totalMins = Math.round(ms / 60000);
-  const h = Math.floor(totalMins / 60);
-  const m = totalMins % 60;
-  if (h > 0) return `${h}h ${m}m`;
-  return `${m}m`;
 }
 
 export default function ShiftsScreen() {
@@ -214,7 +207,7 @@ export default function ShiftsScreen() {
   );
 }
 
-const getStyles = (themeColors: any) => StyleSheet.create({
+function getStyles(themeColors: any) { return StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: themeColors.background,
@@ -373,4 +366,4 @@ const getStyles = (themeColors: any) => StyleSheet.create({
     lineHeight: 21,
     fontFamily: 'Satoshi-Regular',
   },
-});
+}); }

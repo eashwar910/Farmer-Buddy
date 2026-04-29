@@ -8,6 +8,7 @@ import {
   Modal,
   ActivityIndicator,
 } from 'react-native';
+
 import {
   AudioSession,
   LiveKitRoom,
@@ -19,6 +20,7 @@ import {
 } from '@livekit/react-native';
 import { Track, RoomEvent, ConnectionState } from 'livekit-client';
 import type { TrackReferenceOrPlaceholder } from '@livekit/components-core';
+
 import { fetchLiveKitToken } from '../services/livekitToken';
 import { LIVEKIT_URL } from '../services/livekit';
 

@@ -1,9 +1,11 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert, Switch, ScrollView } from 'react-native';
+
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+
 import { useAuth } from '../hooks/useAuth';
 import { useAppContext } from '../context/AppContext';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 export default function SettingsScreen() {
   const { profile, signOut } = useAuth();

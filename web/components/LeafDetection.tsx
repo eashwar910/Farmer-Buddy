@@ -137,7 +137,6 @@ export default function LeafDetection() {
         </label>
       ) : (
         <div className="relative">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={imageUrl}
             alt="Leaf to analyze"

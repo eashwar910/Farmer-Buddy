@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+
 import {
   LiveKitRoom,
   VideoTrack,
@@ -9,6 +10,7 @@ import {
 } from '@livekit/components-react';
 import '@livekit/components-styles';
 import { Track } from 'livekit-client';
+
 import { getSupabaseClient } from '@/lib/supabase';
 
 interface LiveStreamGridProps {

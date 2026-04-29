@@ -3,12 +3,17 @@ import {
   View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet,
   Switch, Modal, FlatList, ActivityIndicator, Animated,
 } from 'react-native';
+
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
+
 import { analyzeFarmData } from '../services/geminiService';
 import { useAppContext } from '../context/AppContext';
+import { RootStackParamList } from '../navigation/types';
+import { IrrigationSchedule } from '../types';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -82,7 +87,9 @@ interface BuddyResult {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function IrrigationTimerScreen({ navigation }: any) {
+type Props = NativeStackScreenProps<RootStackParamList, 'IrrigationTimer'>;
+
+const IrrigationTimerScreen = ({ navigation }: Props) => {
   const { themeColors } = useAppContext();
 
   // Tab
@@ -119,7 +126,7 @@ export default function IrrigationTimerScreen({ navigation }: any) {
       try {
         const saved = await AsyncStorage.getItem('irrigation_schedule');
         if (saved) {
-          const s = JSON.parse(saved);
+          const s = JSON.parse(saved) as IrrigationSchedule;
           if (s.frequency)                    setFrequency(s.frequency);
           if (s.time)                         setSelectedTime(s.time);
           if (s.duration)                     setDuration(s.duration);
@@ -191,7 +198,7 @@ export default function IrrigationTimerScreen({ navigation }: any) {
   // ── Save schedule ─────────────────────────────────────────────────────────
 
   const handleSave = async () => {
-    const schedule = { frequency, time: selectedTime, duration, overnightAllowed, irrigationType };
+    const schedule: IrrigationSchedule = { frequency, time: selectedTime, duration, overnightAllowed, irrigationType };
     await AsyncStorage.setItem('irrigation_schedule', JSON.stringify(schedule));
     showToast('Irrigation scheduled.');
     setTimeout(() => navigation.goBack(), 2200);
@@ -642,11 +649,13 @@ type=[one of: Drip Irrigation, Sprinkler, Flood / Furrow, Hand Watering, Soaker 
 
     </SafeAreaView>
   );
-}
+};
+
+export default IrrigationTimerScreen;
 
 // ── Small helper component ────────────────────────────────────────────────────
 
-function ResultSection({ icon, title, body, themeColors, styles }: any) {
+const ResultSection = ({ icon, title, body, themeColors, styles }: any) => {
   return (
     <View style={styles.resultSection}>
       <View style={styles.resultSectionHeader}>
@@ -656,7 +665,7 @@ function ResultSection({ icon, title, body, themeColors, styles }: any) {
       <Text style={styles.resultBody}>{body}</Text>
     </View>
   );
-}
+};
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 

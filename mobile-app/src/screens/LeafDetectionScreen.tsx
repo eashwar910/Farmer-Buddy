@@ -9,8 +9,10 @@ import {
   View, Text, StyleSheet, TouchableOpacity,
   Image, ScrollView, ActivityIndicator,
 } from 'react-native';
+
 import * as ImagePicker from 'expo-image-picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
 import { useAppContext } from '../context/AppContext';
 const DECISION_CONFIDENCE_THRESHOLD = 0.6; // 60%
 
@@ -343,7 +345,7 @@ export default function LeafDetectionScreen() {
 }
 
 // ── Styles ────────────────────────────────────────────────────────────────────
-const getStyles = (themeColors: any) => StyleSheet.create({
+function getStyles(themeColors: any) { return StyleSheet.create({
   container: { flex: 1, backgroundColor: themeColors.background },
   scrollContent: { padding: 24 },
   uploadSection: { marginBottom: 20, alignItems: 'center' },
@@ -423,4 +425,4 @@ const getStyles = (themeColors: any) => StyleSheet.create({
     marginTop: 16, textAlign: 'center',
     color: themeColors.subtext, fontSize: 12, fontStyle: 'italic',
   },
-});
+}); }

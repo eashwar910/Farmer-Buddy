@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+
 import { getSupabaseClient } from '@/lib/supabase';
 
 interface ChunkSummary {
@@ -31,32 +32,7 @@ export default function AISummaryPanel({ shiftId }: AISummaryPanelProps) {
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!shiftId) return;
-    fetchSummaries();
-
-    // Realtime subscription
-    const supabase = getSupabaseClient();
-    const channel = supabase
-      .channel(`ai-summaries-${shiftId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'recording_chunks',
-        },
-        () => fetchSummaries(),
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shiftId]);
-
-  const fetchSummaries = async () => {
+  const fetchSummaries = useCallback(async () => {
     const supabase = getSupabaseClient();
 
     // Get recordings for the shift
@@ -104,7 +80,30 @@ export default function AISummaryPanel({ shiftId }: AISummaryPanelProps) {
     }
 
     setLoading(false);
-  };
+  }, [shiftId]);
+
+  useEffect(() => {
+    if (!shiftId) return;
+    fetchSummaries();
+
+    const supabase = getSupabaseClient();
+    const channel = supabase
+      .channel(`ai-summaries-${shiftId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'recording_chunks',
+        },
+        () => fetchSummaries(),
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [shiftId, fetchSummaries]);
 
   if (loading) {
     return (

@@ -1,50 +1,26 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, 
-  TextInput, Modal, Alert, ActivityIndicator, KeyboardAvoidingView, Platform 
+import {
+  View, Text, StyleSheet, ScrollView, TouchableOpacity,
+  TextInput, Alert, ActivityIndicator
 } from 'react-native';
+
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
+
 import { analyzeFarmData } from '../services/geminiService';
 import { useAppContext } from '../context/AppContext';
+import { CustomDropdown } from '../components/iot/CustomDropdown';
+import { SensorInputForm, SENSOR_TYPES } from '../components/iot/SensorInputForm';
+import type { SensorType } from '../components/iot/SensorInputForm';
+import { SensorAnalysisResult } from '../components/iot/SensorAnalysisResult';
+import { IoTReading } from '../types';
 
 // --- CONSTANTS ---
-const SENSOR_TYPES = [
-  { label: 'Soil Moisture (% VWC)', unit: '% VWC', category: 'soil' },
-  { label: 'Soil pH', unit: 'pH', category: 'soil' },
-  { label: 'Soil NPK (N / P / K in mg/kg)', unit: 'mg/kg', category: 'soil' },
-  { label: 'Soil Temperature (°C)', unit: '°C', category: 'soil' },
-  { label: 'Soil EC (dS/m)', unit: 'dS/m', category: 'soil' },
-  { label: 'Air Temperature (°C)', unit: '°C', category: 'air' },
-  { label: 'Air Humidity (% RH)', unit: '% RH', category: 'air' },
-  { label: 'Leaf Wetness (0–100)', unit: '', category: 'water' },
-  { label: 'PAR / Light Intensity (µmol/m²/s)', unit: 'µmol/m²/s', category: 'air' },
-  { label: 'Rainfall (mm)', unit: 'mm', category: 'water' },
-  { label: 'Water Level (cm)', unit: 'cm', category: 'water' },
-  { label: 'Water pH', unit: 'pH', category: 'water' },
-  { label: 'Water EC (dS/m)', unit: 'dS/m', category: 'water' },
-  { label: 'Dissolved Oxygen (mg/L)', unit: 'mg/L', category: 'water' },
-  { label: 'CO₂ Level (ppm)', unit: 'ppm', category: 'air' },
-  { label: 'Ammonia NH₃ (ppm)', unit: 'ppm', category: 'air' },
-  { label: 'UV Index', unit: 'Index', category: 'air' },
-  { label: 'Custom', unit: '', category: 'other' }
-];
-
 const FARM_TYPES = ['Outdoor Field', 'Greenhouse', 'Aquaponics', 'Hydroponics', 'Orchard', 'Poultry', 'Mixed'];
 const GROWTH_STAGES = ['Seedling', 'Vegetative', 'Flowering', 'Fruiting', 'Harvest', 'N/A'];
 
 // --- TYPES ---
-interface Sensor {
-  id: string;
-  name: string;
-  type: string;
-  unit: string;
-  reading: string;
-  notes: string;
-  category: string;
-}
-
 interface FarmContext {
   cropType: string;
   farmType: string;
@@ -59,74 +35,27 @@ interface Report {
   content: string;
 }
 
-// --- UTILS ---
-const CustomDropdown = ({ label, options, selected, onSelect, themeColors, styles }: any) => {
-  const [visible, setVisible] = useState(false);
-  return (
-    <View style={styles.inputGroup}>
-      <Text style={styles.label}>{label}</Text>
-      <TouchableOpacity style={styles.dropdownButton} onPress={() => setVisible(true)}>
-        <Text style={selected ? styles.inputText : styles.placeholderText}>
-          {selected || 'Select an option...'}
-        </Text>
-      </TouchableOpacity>
-      
-      <Modal visible={visible} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.dropdownModalContainer}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select {label}</Text>
-              <TouchableOpacity onPress={() => setVisible(false)}>
-                <Text style={styles.closeBtnText}>Close</Text>
-              </TouchableOpacity>
-            </View>
-            <ScrollView>
-              {options.map((opt: any, idx: number) => {
-                const optLabel = typeof opt === 'string' ? opt : opt.label;
-                return (
-                  <TouchableOpacity 
-                    key={idx} 
-                    style={styles.dropdownOption}
-                    onPress={() => {
-                      onSelect(opt);
-                      setVisible(false);
-                    }}
-                  >
-                    <Text style={[styles.dropdownOptionText, selected === optLabel && styles.dropdownOptionSelected]}>
-                      {optLabel}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-    </View>
-  );
-};
-
 export default function IoTSensorScreen() {
   const { themeColors, language, t } = useAppContext();
-  
+
   // State
-  const [sensors, setSensors] = useState<Sensor[]>([]);
+  const [sensors, setSensors] = useState<IoTReading[]>([]);
   const [farmContext, setFarmContext] = useState<FarmContext>({
     cropType: '', farmType: '', growthStage: '', location: '', observations: ''
   });
   const [reports, setReports] = useState<Report[]>([]);
-  
+
   // UI State
   const [showSensorModal, setShowSensorModal] = useState(false);
   const [showFarmContext, setShowFarmContext] = useState(true);
   const [showPastReports, setShowPastReports] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<string | null>(null);
-  
+
   // Edit Sensor State
   const [editingSensorId, setEditingSensorId] = useState<string | null>(null);
   const [sName, setSName] = useState('');
-  const [sType, setSType] = useState(SENSOR_TYPES[0]);
+  const [sType, setSType] = useState<SensorType>(SENSOR_TYPES[0]);
   const [sUnit, setSUnit] = useState(SENSOR_TYPES[0].unit);
   const [sReading, setSReading] = useState('');
   const [sNotes, setSNotes] = useState('');
@@ -151,7 +80,7 @@ export default function IoTSensorScreen() {
     }
   };
 
-  const saveSensors = async (newSensors: Sensor[]) => {
+  const saveSensors = async (newSensors: IoTReading[]) => {
     setSensors(newSensors);
     await AsyncStorage.setItem('iot_sensors', JSON.stringify(newSensors));
   };
@@ -173,7 +102,7 @@ export default function IoTSensorScreen() {
     Alert.alert('Connect to IoT Devices', 'IoT device connection coming soon. Please enter readings manually for now.');
   };
 
-  const openSensorModal = (sensor?: Sensor) => {
+  const openSensorModal = (sensor?: IoTReading) => {
     if (sensor) {
       setEditingSensorId(sensor.id);
       setSName(sensor.name);
@@ -199,7 +128,7 @@ export default function IoTSensorScreen() {
       return;
     }
 
-    const newSensor: Sensor = {
+    const newSensor: IoTReading = {
       id: editingSensorId || Date.now().toString(),
       name: sName,
       type: sType.label,
@@ -223,9 +152,9 @@ export default function IoTSensorScreen() {
   const handleDeleteSensor = (id: string) => {
     Alert.alert('Delete Sensor', 'Are you sure you want to remove this sensor from your list?', [
       { text: 'Cancel', style: 'cancel' },
-      { 
-        text: 'Delete', 
-        style: 'destructive', 
+      {
+        text: 'Delete',
+        style: 'destructive',
         onPress: () => saveSensors(sensors.filter(s => s.id !== id))
       }
     ]);
@@ -341,7 +270,7 @@ Next Steps:
   return (
     <SafeAreaView style={styles.container} edges={['bottom', 'left', 'right']}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        
+
         {/* SECTION 1: Connect Placeholder */}
         <TouchableOpacity style={styles.hardwareBtn} onPress={handleConnectHardware}>
           <Text style={styles.hardwareBtnText}>📡 Connect to IoT Devices</Text>
@@ -390,21 +319,21 @@ Next Steps:
 
         {/* SECTION 3: Farm Context Inputs */}
         <View style={styles.section}>
-          <TouchableOpacity 
-            style={styles.collapsibleHeader} 
+          <TouchableOpacity
+            style={styles.collapsibleHeader}
             onPress={() => setShowFarmContext(!showFarmContext)}
           >
             <Text style={styles.sectionTitle}>Farm Context (Optional)</Text>
             <Text style={styles.collapseIcon}>{showFarmContext ? '▲' : '▼'}</Text>
           </TouchableOpacity>
-          
+
           {showFarmContext && (
             <View style={styles.collapsibleContent}>
               <View style={styles.inputGroup}>
                 <Text style={styles.label}>Crop / Livestock Type</Text>
-                <TextInput 
-                  style={styles.input} 
-                  placeholder="e.g., Chili, Tilapia" 
+                <TextInput
+                  style={styles.input}
+                  placeholder="e.g., Chili, Tilapia"
                   placeholderTextColor={themeColors.subtext}
                   value={farmContext.cropType}
                   onChangeText={(v) => saveContext({...farmContext, cropType: v})}
@@ -417,7 +346,6 @@ Next Steps:
                 selected={farmContext.farmType}
                 onSelect={(val: string) => saveContext({...farmContext, farmType: val})}
                 themeColors={themeColors}
-                styles={styles}
               />
 
               <CustomDropdown
@@ -426,7 +354,6 @@ Next Steps:
                 selected={farmContext.growthStage}
                 onSelect={(val: string) => saveContext({...farmContext, growthStage: val})}
                 themeColors={themeColors}
-                styles={styles}
               />
 
               <View style={styles.inputGroup}>
@@ -436,9 +363,9 @@ Next Steps:
                     <Text style={styles.linkText}>Use My Location</Text>
                   </TouchableOpacity>
                 </View>
-                <TextInput 
-                  style={styles.input} 
-                  placeholder="e.g., Cameron Highlands, Pahang" 
+                <TextInput
+                  style={styles.input}
+                  placeholder="e.g., Cameron Highlands, Pahang"
                   placeholderTextColor={themeColors.subtext}
                   value={farmContext.location}
                   onChangeText={(v) => saveContext({...farmContext, location: v})}
@@ -447,9 +374,9 @@ Next Steps:
 
               <View style={styles.inputGroup}>
                 <Text style={styles.label}>Recent Observations</Text>
-                <TextInput 
-                  style={[styles.input, styles.textArea]} 
-                  placeholder="Any signs of pests, wilting, or unusual growth?" 
+                <TextInput
+                  style={[styles.input, styles.textArea]}
+                  placeholder="Any signs of pests, wilting, or unusual growth?"
                   placeholderTextColor={themeColors.subtext}
                   multiline
                   numberOfLines={3}
@@ -464,8 +391,8 @@ Next Steps:
         {/* SECTION 5: Past Reports */}
         {reports.length > 0 && (
           <View style={styles.section}>
-            <TouchableOpacity 
-              style={styles.collapsibleHeader} 
+            <TouchableOpacity
+              style={styles.collapsibleHeader}
               onPress={() => setShowPastReports(!showPastReports)}
             >
               <Text style={styles.sectionTitle}>Past Reports ({reports.length})</Text>
@@ -475,8 +402,8 @@ Next Steps:
             {showPastReports && (
               <View style={styles.collapsibleContent}>
                 {reports.map((r, i) => (
-                  <TouchableOpacity 
-                    key={r.id} 
+                  <TouchableOpacity
+                    key={r.id}
                     style={styles.reportItem}
                     onPress={() => setAnalysisResult(r.content)} // Just opens the result view
                   >
@@ -494,8 +421,8 @@ Next Steps:
       {/* SECTION 4: Analyze Button */}
       {!analysisResult && (
         <View style={styles.footer}>
-          <TouchableOpacity 
-            style={[styles.analyzeBtn, sensors.length === 0 && styles.analyzeBtnDisabled]} 
+          <TouchableOpacity
+            style={[styles.analyzeBtn, sensors.length === 0 && styles.analyzeBtnDisabled]}
             disabled={sensors.length === 0 || analyzing}
             onPress={handleAnalyze}
           >
@@ -511,103 +438,31 @@ Next Steps:
         </View>
       )}
 
-      {/* RESULT MODAL / OVERLAY */}
-      <Modal visible={!!analysisResult} transparent animationType="slide">
-        <View style={styles.resultModalOverlay}>
-          <View style={styles.resultModalContent}>
-            <View style={styles.resultHeader}>
-              <Text style={styles.resultHeaderTitle}>Analysis Report</Text>
-              <TouchableOpacity onPress={() => setAnalysisResult(null)}>
-                <Text style={styles.closeBtnText}>Done</Text>
-              </TouchableOpacity>
-            </View>
-            <ScrollView style={styles.resultScroll}>
-               <Text style={styles.resultMarkdown}>{analysisResult}</Text>
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
+      {/* RESULT MODAL */}
+      <SensorAnalysisResult
+        analysisResult={analysisResult}
+        onClose={() => setAnalysisResult(null)}
+        themeColors={themeColors}
+      />
 
-      {/* ADD SENSOR MODAL */}
-      <Modal visible={showSensorModal} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <KeyboardAvoidingView 
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            style={styles.modalContainer}
-          >
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{editingSensorId ? 'Edit Sensor' : 'Add Sensor'}</Text>
-              <TouchableOpacity onPress={() => setShowSensorModal(false)}>
-                <Text style={styles.closeBtnText}>Cancel</Text>
-              </TouchableOpacity>
-            </View>
-            
-            <ScrollView style={styles.modalBody}>
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Sensor Name</Text>
-                <TextInput 
-                  style={styles.input} 
-                  placeholder="e.g., Soil Probe A" 
-                  placeholderTextColor={themeColors.subtext}
-                  value={sName}
-                  onChangeText={setSName}
-                />
-              </View>
-
-              <CustomDropdown
-                label="Sensor Type"
-                options={SENSOR_TYPES}
-                selected={sType?.label}
-                onSelect={(val: any) => {
-                  setSType(val);
-                  setSUnit(val.unit);
-                }}
-                themeColors={themeColors}
-                styles={styles}
-              />
-
-              <View style={styles.rowInputs}>
-                <View style={[styles.inputGroup, { flex: 2, marginRight: 10 }]}>
-                  <Text style={styles.label}>Current Reading</Text>
-                  <TextInput 
-                    style={styles.input} 
-                    placeholder="Value" 
-                    placeholderTextColor={themeColors.subtext}
-                    keyboardType="numeric"
-                    value={sReading}
-                    onChangeText={setSReading}
-                  />
-                </View>
-                <View style={[styles.inputGroup, { flex: 1 }]}>
-                  <Text style={styles.label}>Unit</Text>
-                  <TextInput 
-                    style={styles.input} 
-                    value={sUnit}
-                    onChangeText={setSUnit}
-                  />
-                </View>
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Notes (Optional)</Text>
-                <TextInput 
-                  style={[styles.input, styles.textArea]} 
-                  placeholder="e.g., Seems inaccurate after rain" 
-                  placeholderTextColor={themeColors.subtext}
-                  multiline
-                  numberOfLines={2}
-                  value={sNotes}
-                  onChangeText={setSNotes}
-                />
-              </View>
-            </ScrollView>
-
-            <TouchableOpacity style={styles.modalSaveBtn} onPress={handleSaveSensor}>
-              <Text style={styles.modalSaveBtnText}>Save Sensor Data</Text>
-            </TouchableOpacity>
-          </KeyboardAvoidingView>
-        </View>
-      </Modal>
+      {/* ADD / EDIT SENSOR MODAL */}
+      <SensorInputForm
+        visible={showSensorModal}
+        editingSensorId={editingSensorId}
+        sName={sName}
+        setSName={setSName}
+        sType={sType}
+        setSType={setSType}
+        sUnit={sUnit}
+        setSUnit={setSUnit}
+        sReading={sReading}
+        setSReading={setSReading}
+        sNotes={sNotes}
+        setSNotes={setSNotes}
+        onClose={() => setShowSensorModal(false)}
+        onSave={handleSaveSensor}
+        themeColors={themeColors}
+      />
 
     </SafeAreaView>
   );
@@ -764,20 +619,9 @@ const getStyles = (themeColors: any) => StyleSheet.create({
     padding: 12,
     fontSize: 16,
   },
-  inputText: {
-    color: themeColors.text,
-    fontSize: 16,
-  },
-  placeholderText: {
-    color: themeColors.subtext,
-    fontSize: 16,
-  },
   textArea: {
     minHeight: 80,
     textAlignVertical: 'top',
-  },
-  rowInputs: {
-    flexDirection: 'row',
   },
   locationLabelRow: {
     flexDirection: 'row',
@@ -819,54 +663,6 @@ const getStyles = (themeColors: any) => StyleSheet.create({
     fontSize: 12,
     marginTop: 8,
   },
-  dropdownButton: {
-    backgroundColor: themeColors.background,
-    borderWidth: 1,
-    borderColor: themeColors.border,
-    borderRadius: 12,
-    padding: 14,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'flex-end',
-  },
-  dropdownModalContainer: {
-    backgroundColor: themeColors.card,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    padding: 24,
-    maxHeight: '70%',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  modalTitle: {
-    color: themeColors.text,
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  closeBtnText: {
-    color: themeColors.accent,
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  dropdownOption: {
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: themeColors.border,
-  },
-  dropdownOptionText: {
-    color: themeColors.text,
-    fontSize: 16,
-  },
-  dropdownOptionSelected: {
-    color: themeColors.accent,
-    fontWeight: '700',
-  },
   reportItem: {
     padding: 16,
     backgroundColor: themeColors.background,
@@ -883,59 +679,5 @@ const getStyles = (themeColors: any) => StyleSheet.create({
   reportPreview: {
     color: themeColors.text,
     fontSize: 14,
-  },
-  resultModalOverlay: {
-    flex: 1,
-    backgroundColor: themeColors.background,
-  },
-  resultModalContent: {
-    flex: 1,
-    backgroundColor: themeColors.background,
-    marginTop: 40,
-    borderTopWidth: 1,
-    borderTopColor: themeColors.border,
-  },
-  resultHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: themeColors.border,
-    backgroundColor: themeColors.card,
-  },
-  resultHeaderTitle: {
-    color: themeColors.text,
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  resultScroll: {
-    padding: 20,
-  },
-  resultMarkdown: {
-    color: themeColors.text,
-    fontSize: 16,
-    lineHeight: 24,
-  },
-  modalContainer: {
-    backgroundColor: themeColors.card,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    padding: 24,
-    height: '85%',
-  },
-  modalBody: {
-    flex: 1,
-  },
-  modalSaveBtn: {
-    backgroundColor: themeColors.accent,
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginTop: 16,
-  },
-  modalSaveBtnText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '700',
   },
 });

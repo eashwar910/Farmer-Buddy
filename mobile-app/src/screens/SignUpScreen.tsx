@@ -11,9 +11,11 @@ import {
   Platform,
   ScrollView,
 } from 'react-native';
+
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useAuth } from '../hooks/useAuth';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+
+import { useAuth } from '../hooks/useAuth';
 import { AuthStackParamList } from '../navigation/types';
 import { useAppContext } from '../context/AppContext';
 

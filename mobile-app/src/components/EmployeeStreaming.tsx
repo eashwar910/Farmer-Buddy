@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
+
 import * as ImagePicker from 'expo-image-picker';
 import {
   AudioSession,
@@ -17,6 +18,7 @@ import {
   isTrackReference,
 } from '@livekit/react-native';
 import { Track, RoomEvent, ConnectionState } from 'livekit-client';
+
 import { fetchLiveKitToken } from '../services/livekitToken';
 import { LIVEKIT_URL } from '../services/livekit';
 import { supabase } from '../services/supabase';

@@ -2,8 +2,10 @@
 
 export const dynamic = 'force-dynamic';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+
 import { useRouter } from 'next/navigation';
+
 import { getSupabaseClient } from '@/lib/supabase';
 import WeatherWidget from '@/components/WeatherWidget';
 import LeafDetection from '@/components/LeafDetection';
@@ -46,14 +48,7 @@ export default function EmployeeDashboard() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabKey>('overview');
 
-  useEffect(() => {
-    let cleanup: (() => void) | undefined;
-    init().then((fn) => { cleanup = fn; });
-    return () => { cleanup?.(); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const init = async () => {
+  const init = useCallback(async () => {
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -142,7 +137,13 @@ export default function EmployeeDashboard() {
       supabase.removeChannel(shiftChannel);
       supabase.removeChannel(recChannel);
     };
-  };
+  }, [router, supabase]);
+
+  useEffect(() => {
+    let cleanup: (() => void) | undefined;
+    init().then((fn) => { cleanup = fn; });
+    return () => { cleanup?.(); };
+  }, [init]);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();

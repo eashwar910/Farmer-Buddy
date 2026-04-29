@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Animated } from 'react-native';
+
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+
 import { useAppContext } from '../context/AppContext';
 
 const WEATHER_CODE_MAP: Record<number, string> = {
@@ -30,7 +32,7 @@ interface WeatherData {
   locationName: string;
 }
 
-export default function WeatherWidget() {
+const WeatherWidget = () => {
   const { themeColors } = useAppContext();
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -171,7 +173,9 @@ export default function WeatherWidget() {
 
     </View>
   );
-}
+};
+
+export default WeatherWidget;
 
 const getStyles = (themeColors: any) => StyleSheet.create({
   container: {

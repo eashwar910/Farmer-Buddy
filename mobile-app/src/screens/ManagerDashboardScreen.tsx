@@ -11,8 +11,10 @@ import {
   RefreshControl,
   Linking,
 } from 'react-native';
+
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+
 import { useAuth } from '../hooks/useAuth';
 import { useShift } from '../hooks/useShift';
 import { usePresence } from '../hooks/usePresence';
@@ -21,13 +23,7 @@ import { UserProfile } from '../types';
 import ManagerLiveGrid from '../components/ManagerLiveGrid';
 import { RootStackParamList } from '../navigation/types';
 import { useAppContext } from '../context/AppContext';
-
-function formatTime(totalSeconds: number): string {
-  const h = Math.floor(totalSeconds / 3600);
-  const m = Math.floor((totalSeconds % 3600) / 60);
-  const s = totalSeconds % 60;
-  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-}
+import { formatTime } from '../utils/format';
 
 type NavProp = NativeStackNavigationProp<RootStackParamList>;
 

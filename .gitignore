@@ -1,3 +1,9 @@
 docs/
 .claude/
 demoapp/
+*.mp4
+*.pdf
+qr-code.png
+DJI_CAMERA_SETUP.md
+.DS_Store
+.gitignore

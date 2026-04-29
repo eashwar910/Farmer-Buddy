@@ -13,22 +13,14 @@ import {
   Alert,
   Linking,
 } from 'react-native';
+
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
+
 import { supabase } from '../services/supabase';
 import { useAppContext } from '../context/AppContext';
-
-interface Recording {
-  id: string;
-  shift_id: string;
-  employee_id: string;
-  egress_id: string | null;
-  chunk_index: number;
-  storage_url: string | null;
-  status: 'recording' | 'completed' | 'failed';
-  started_at: string;
-  ended_at: string | null;
-  summary: string | null;
-  processing_status: 'pending' | 'processing' | 'completed' | 'failed' | null;
-}
+import { formatDuration } from '../utils/format';
+import { Recording, ShiftReport } from '../types';
+import { RootStackParamList } from '../navigation/types';
 
 interface Employee {
   id: string;
@@ -41,21 +33,7 @@ interface EmployeeWithRecordings {
   recordings: Recording[];
 }
 
-interface ShiftReport {
-  employee_id: string;
-  report_url: string;
-}
-
-interface ShiftDetailsScreenProps {
-  route: {
-    params: {
-      shiftId: string;
-      shiftStartedAt: string;
-      shiftStatus?: string;
-    };
-  };
-  navigation: any;
-}
+type Props = NativeStackScreenProps<RootStackParamList, 'ShiftDetails'>;
 
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString([], {
@@ -72,16 +50,6 @@ function formatDate(iso: string): string {
     day: 'numeric',
     year: 'numeric',
   });
-}
-
-function formatDuration(startIso: string, endIso: string | null): string {
-  if (!endIso) return 'Ongoing';
-  const ms = new Date(endIso).getTime() - new Date(startIso).getTime();
-  const totalMins = Math.round(ms / 60000);
-  const h = Math.floor(totalMins / 60);
-  const m = totalMins % 60;
-  if (h > 0) return `${h}h ${m}m`;
-  return `${m}m`;
 }
 
 function SummaryContent({ summaryJson, themeColors }: { summaryJson: string; themeColors: any }) {
@@ -224,7 +192,7 @@ function SummaryModal({
   );
 }
 
-export default function ShiftDetailsScreen({ route, navigation }: ShiftDetailsScreenProps) {
+export default function ShiftDetailsScreen({ route, navigation }: Props) {
   const { shiftId, shiftStartedAt } = route.params;
   const { themeColors } = useAppContext();
 
@@ -543,7 +511,7 @@ export default function ShiftDetailsScreen({ route, navigation }: ShiftDetailsSc
   );
 }
 
-const getStyles = (themeColors: any) => StyleSheet.create({
+function getStyles(themeColors: any) { return StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: themeColors.background },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   list: { padding: 16, paddingBottom: 100 },
@@ -680,9 +648,9 @@ const getStyles = (themeColors: any) => StyleSheet.create({
   emptyIcon: { fontSize: 52, marginBottom: 14 },
   emptyTitle: { fontSize: 20, fontWeight: '700', color: themeColors.text, marginBottom: 8 },
   emptySub: { fontSize: 14, color: themeColors.subtext, textAlign: 'center', lineHeight: 21 },
-});
+}); }
 
-const getModalStyles = (themeColors: any) => StyleSheet.create({
+function getModalStyles(themeColors: any) { return StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
   sheet: {
     backgroundColor: themeColors.card,
@@ -717,4 +685,4 @@ const getModalStyles = (themeColors: any) => StyleSheet.create({
   timelineRow: { flexDirection: 'row', gap: 8, marginBottom: 6 },
   timelineTime: { fontSize: 12, color: themeColors.emphasis, fontWeight: '600', minWidth: 60 },
   timelineActivity: { flex: 1, fontSize: 13, color: themeColors.text, lineHeight: 19 },
-});
+}); }

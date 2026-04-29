@@ -9,37 +9,18 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
+
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
+
 import { supabase } from '../services/supabase';
 import RecordingSummaryModal from '../components/RecordingSummaryModal';
 import { useAppContext } from '../context/AppContext';
+import { Recording } from '../types';
+import { RootStackParamList } from '../navigation/types';
 
-interface Recording {
-  id: string;
-  shift_id: string;
-  employee_id: string;
-  egress_id: string | null;
-  chunk_index: number;
-  storage_url: string | null;
-  status: 'recording' | 'completed' | 'failed';
-  started_at: string;
-  ended_at: string | null;
-  summary: string | null;
-  processing_status: 'pending' | 'processing' | 'completed' | 'failed' | null;
-}
+type Props = NativeStackScreenProps<RootStackParamList, 'RecordingsList'>;
 
-interface RecordingsListScreenProps {
-  route: {
-    params: {
-      shiftId: string;
-      employeeId: string;
-      employeeName: string;
-      recordingId?: string; // when set: show per-chunk rows from recording_chunks
-    };
-  };
-  navigation: any;
-}
-
-export default function RecordingsListScreen({ route, navigation }: RecordingsListScreenProps) {
+export default function RecordingsListScreen({ route, navigation }: Props) {
   const { shiftId, employeeId, employeeName, recordingId } = route.params;
   const { themeColors } = useAppContext();
   const [recordings, setRecordings] = useState<Recording[]>([]);
